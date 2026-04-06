@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginForm() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -16,14 +18,29 @@ export default function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
     if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password });
+      if (!name.trim()) {
+        setError("이름을 입력해주세요.");
+        setLoading(false);
+        return;
+      }
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: name.trim() },
+        },
+      });
       if (error) {
         setError(error.message);
       } else {
-        setError("가입 완료! 이메일 인증 후 로그인하세요.");
+        setSuccess("가입 완료! 로그인해주세요.");
+        setIsSignUp(false);
+        setName("");
+        setPassword("");
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({
@@ -52,6 +69,27 @@ export default function LoginForm() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isSignUp && (
+            <div>
+              <label
+                htmlFor="name"
+                className="mb-1 block text-sm font-medium text-gray-700"
+              >
+                이름
+              </label>
+              <input
+                id="name"
+                type="text"
+                autoComplete="name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="홍길동"
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+          )}
+
           <div>
             <label
               htmlFor="email"
@@ -93,9 +131,26 @@ export default function LoginForm() {
             />
           </div>
 
+          {isSignUp && (
+            <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-600">
+              가입 시 아래 사항에 동의하게 됩니다:
+              <ul className="mt-1 ml-3 list-disc space-y-0.5">
+                <li>출퇴근 기록 및 근무시간 관리를 위한 개인정보(이름, 이메일) 수집 및 이용</li>
+                <li>위치정보(GPS) 수집 및 이용 (출퇴근 증빙 목적, 별도 동의)</li>
+                <li>근태 데이터의 회사 내 관리자 제공 (3자 제공)</li>
+              </ul>
+            </div>
+          )}
+
           {error && (
             <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
               {error}
+            </p>
+          )}
+
+          {success && (
+            <p className="rounded-lg bg-green-50 p-3 text-sm text-green-600">
+              {success}
             </p>
           )}
 
@@ -112,6 +167,7 @@ export default function LoginForm() {
           onClick={() => {
             setIsSignUp(!isSignUp);
             setError("");
+            setSuccess("");
           }}
           className="mt-4 w-full py-2 text-center text-sm text-blue-600 hover:underline"
         >
