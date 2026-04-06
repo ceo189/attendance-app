@@ -2,6 +2,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "@/components/LogoutButton";
 
+const LOCATION_LABELS: Record<string, string> = {
+  office: "사무실",
+  outside: "외부",
+  remote: "재택",
+};
+
 function formatTime(iso: string | null) {
   if (!iso) return "-";
   return new Date(iso).toLocaleTimeString("ko-KR", {
@@ -11,6 +17,11 @@ function formatTime(iso: string | null) {
     hour12: false,
     timeZone: "Asia/Seoul",
   });
+}
+
+function formatLocation(loc: string | null) {
+  if (!loc) return "";
+  return LOCATION_LABELS[loc] ?? loc;
 }
 
 export default async function AdminPage() {
@@ -31,13 +42,17 @@ export default async function AdminPage() {
 
   if (profile?.role !== "admin") redirect("/dashboard");
 
-  // Get today's date
-  const today = new Date().toISOString().split("T")[0];
+  // Get today's date (Korean timezone)
+  const today = new Date().toLocaleDateString("sv-SE", {
+    timeZone: "Asia/Seoul",
+  });
 
   // Get all attendance records for today with profile emails
   const { data: records } = await supabase
     .from("attendance")
-    .select("clock_in, clock_out, profiles(email)")
+    .select(
+      "clock_in, clock_out, clock_in_location, clock_out_location, profiles(email)"
+    )
     .eq("date", today)
     .order("clock_in", { ascending: true });
 
@@ -50,7 +65,12 @@ export default async function AdminPage() {
   // Build lookup for today's attendance
   const attendanceMap = new Map<
     string,
-    { clock_in: string | null; clock_out: string | null }
+    {
+      clock_in: string | null;
+      clock_out: string | null;
+      clock_in_location: string | null;
+      clock_out_location: string | null;
+    }
   >();
   records?.forEach((r) => {
     const email = (r.profiles as unknown as { email: string })?.email;
@@ -58,6 +78,8 @@ export default async function AdminPage() {
       attendanceMap.set(email, {
         clock_in: r.clock_in,
         clock_out: r.clock_out,
+        clock_in_location: r.clock_in_location,
+        clock_out_location: r.clock_out_location,
       });
     }
   });
@@ -67,6 +89,7 @@ export default async function AdminPage() {
     month: "long",
     day: "numeric",
     weekday: "long",
+    timeZone: "Asia/Seoul",
   });
 
   return (
@@ -165,11 +188,25 @@ export default async function AdminPage() {
                         {p.role === "admin" ? "관리자" : "직원"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center text-gray-700">
-                      {formatTime(att?.clock_in ?? null)}
+                    <td className="px-4 py-3 text-center">
+                      <div className="text-gray-700">
+                        {formatTime(att?.clock_in ?? null)}
+                      </div>
+                      {att?.clock_in_location && (
+                        <span className="text-xs text-gray-500">
+                          {formatLocation(att.clock_in_location)}
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-center text-gray-700">
-                      {formatTime(att?.clock_out ?? null)}
+                    <td className="px-4 py-3 text-center">
+                      <div className="text-gray-700">
+                        {formatTime(att?.clock_out ?? null)}
+                      </div>
+                      {att?.clock_out_location && (
+                        <span className="text-xs text-gray-500">
+                          {formatLocation(att.clock_out_location)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
