@@ -17,7 +17,6 @@ function formatTime(iso: string | null) {
   return new Date(iso).toLocaleTimeString("ko-KR", {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
     hour12: false,
     timeZone: "Asia/Seoul",
   });
@@ -30,6 +29,18 @@ function formatDate(dateStr: string) {
     day: "numeric",
     weekday: "short",
   });
+}
+
+function calcWorkedHours(clock_in: string | null, clock_out: string | null): string {
+  if (!clock_in || !clock_out) return "-";
+  const diffMinutes = Math.floor(
+    (new Date(clock_out).getTime() - new Date(clock_in).getTime()) / 60000
+  );
+  const worked = Math.max(0, diffMinutes - 60);
+  if (worked === 0) return "0h";
+  const h = Math.floor(worked / 60);
+  const m = worked % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 function LocationBadge({ value }: { value: string | null }) {
@@ -55,7 +66,7 @@ export default function WeeklyRecords({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200">
+    <div className="overflow-x-auto rounded-xl border border-gray-200">
       <table className="w-full text-sm">
         <thead className="bg-gray-50">
           <tr>
@@ -67,6 +78,9 @@ export default function WeeklyRecords({
             </th>
             <th className="px-3 py-3 text-center font-medium text-gray-600">
               퇴근
+            </th>
+            <th className="px-3 py-3 text-center font-medium text-gray-600">
+              근무시간
             </th>
           </tr>
         </thead>
@@ -81,6 +95,11 @@ export default function WeeklyRecords({
               <td className="px-3 py-3 text-center">
                 <div className="text-gray-700">{formatTime(r.clock_out)}</div>
                 <LocationBadge value={r.clock_out_location} />
+              </td>
+              <td className="px-3 py-3 text-center">
+                <span className="font-medium text-gray-700">
+                  {calcWorkedHours(r.clock_in, r.clock_out)}
+                </span>
               </td>
             </tr>
           ))}

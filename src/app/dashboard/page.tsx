@@ -5,6 +5,8 @@ import AttendanceButtons from "@/components/AttendanceButtons";
 import WeeklyRecords from "@/components/WeeklyRecords";
 import LogoutButton from "@/components/LogoutButton";
 import ConsentModal from "@/components/ConsentModal";
+import WorkingHoursSummary from "@/components/WorkingHoursSummary";
+import LeaveSection from "@/components/LeaveSection";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -47,6 +49,13 @@ export default async function DashboardPage() {
     .lte("date", today)
     .order("date", { ascending: false });
 
+  const { data: leaveRequests } = await supabase
+    .from("leave_requests")
+    .select("id, leave_type, start_date, end_date, reason, status, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
   const needsConsent = !profile?.location_consent;
 
   return (
@@ -56,7 +65,7 @@ export default async function DashboardPage() {
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
           <h1 className="text-lg font-bold text-gray-900">근태관리</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {(profile?.role === "admin" || profile?.role === "master") && (
               <a
                 href="/admin"
@@ -65,19 +74,22 @@ export default async function DashboardPage() {
                 관리자
               </a>
             )}
-            <span className="text-sm text-gray-500">{user.email}</span>
+            <span className="hidden text-sm text-gray-500 sm:inline">
+              {user.email}
+            </span>
             <LogoutButton />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-8">
-        <div className="space-y-8">
+      <main className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
+        <div className="space-y-6">
           <Clock />
 
           <div className="rounded-2xl bg-white p-6 shadow-sm">
             <AttendanceButtons
               userId={user.id}
+              userEmail={user.email ?? ""}
               recordId={todayRecord?.id ?? null}
               initialClockIn={todayRecord?.clock_in ?? null}
               initialClockOut={todayRecord?.clock_out ?? null}
@@ -86,6 +98,14 @@ export default async function DashboardPage() {
               locationConsent={!!profile?.location_consent}
             />
           </div>
+
+          <WorkingHoursSummary records={weeklyRecords ?? []} />
+
+          <LeaveSection
+            userId={user.id}
+            userEmail={user.email ?? ""}
+            leaveRequests={leaveRequests ?? []}
+          />
 
           <div>
             <h2 className="mb-3 text-sm font-semibold text-gray-700">

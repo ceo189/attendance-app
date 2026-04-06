@@ -21,6 +21,25 @@ const ROLE_COLORS: Record<string, string> = {
   employee: "bg-blue-100 text-blue-700",
 };
 
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  annual: "연차",
+  sick: "병가",
+  personal: "개인사유",
+  other: "기타",
+};
+
+const LEAVE_STATUS_LABELS: Record<string, string> = {
+  pending: "검토중",
+  approved: "승인",
+  rejected: "반려",
+};
+
+const LEAVE_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-700",
+  approved: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+};
+
 function formatTime(iso: string | null) {
   if (!iso) return "-";
   return new Date(iso).toLocaleTimeString("ko-KR", {
@@ -64,6 +83,18 @@ interface ProfileItem {
   role: string;
 }
 
+export interface LeaveRequestItem {
+  id: string;
+  user_id: string;
+  email: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+  status: string;
+  created_at: string;
+}
+
 interface Props {
   role: string;
   todayFormatted: string;
@@ -71,7 +102,10 @@ interface Props {
   profilesList: ProfileItem[];
   totalEmployees: number;
   totalPresent: number;
+  leaveRequests: LeaveRequestItem[];
 }
+
+type TabType = "records" | "leaves" | "roles";
 
 export default function AdminTabs({
   role,
@@ -80,16 +114,23 @@ export default function AdminTabs({
   profilesList: initialProfiles,
   totalEmployees,
   totalPresent,
+  leaveRequests: initialLeaveRequests,
 }: Props) {
-  const [tab, setTab] = useState<"records" | "roles">("records");
+  const [tab, setTab] = useState<TabType>("records");
   const [profiles, setProfiles] = useState(initialProfiles);
+  const [leaveRequests, setLeaveRequests] = useState(initialLeaveRequests);
   const [loading, setLoading] = useState<string | null>(null);
+  const [csvMonth, setCsvMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
   const supabase = createClient();
   const isMaster = role === "master";
+  const isAdminOrMaster = role === "admin" || role === "master";
 
   const showToast = useCallback(
     (type: "success" | "error", message: string) => {
@@ -105,10 +146,7 @@ export default function AdminTabs({
   // Build attendance lookup by email
   const attendanceMap = new Map(attendanceList.map((a) => [a.email, a]));
 
-  async function handleRoleChange(
-    profileId: string,
-    currentRole: string
-  ) {
+  async function handleRoleChange(profileId: string, currentRole: string) {
     const newRole = currentRole === "admin" ? "employee" : "admin";
     setLoading(profileId);
     const { error } = await supabase
@@ -122,10 +160,152 @@ export default function AdminTabs({
       setProfiles((prev) =>
         prev.map((p) => (p.id === profileId ? { ...p, role: newRole } : p))
       );
-      showToast("success", `권한이 ${ROLE_LABELS[newRole]}(으)로 변경되었습니다.`);
+      showToast(
+        "success",
+        `권한이 ${ROLE_LABELS[newRole]}(으)로 변경되었습니다.`
+      );
     }
     setLoading(null);
   }
+
+  async function handleLeaveStatusChange(
+    leaveId: string,
+    newStatus: "approved" | "rejected"
+  ) {
+    setLoading(leaveId);
+    const { error } = await supabase
+      .from("leave_requests")
+      .update({ status: newStatus })
+      .eq("id", leaveId);
+
+    if (error) {
+      showToast("error", `상태 변경 실패: ${error.message}`);
+    } else {
+      setLeaveRequests((prev) =>
+        prev.map((r) => (r.id === leaveId ? { ...r, status: newStatus } : r))
+      );
+      showToast(
+        "success",
+        newStatus === "approved" ? "휴가 신청이 승인되었습니다." : "휴가 신청이 반려되었습니다."
+      );
+    }
+    setLoading(null);
+  }
+
+  async function handleCsvExport() {
+    if (!csvMonth) {
+      showToast("error", "월을 선택해주세요.");
+      return;
+    }
+    setLoading("csv");
+
+    const [year, month] = csvMonth.split("-");
+    const startDate = `${year}-${month}-01`;
+    const lastDay = new Date(Number(year), Number(month), 0).getDate();
+    const endDate = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
+
+    const [{ data: attData }, { data: leaveData }] = await Promise.all([
+      supabase
+        .from("attendance")
+        .select(
+          "user_id, date, clock_in, clock_out, clock_in_location, clock_out_location, profiles(email)"
+        )
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .order("date", { ascending: true }),
+      supabase
+        .from("leave_requests")
+        .select(
+          "user_id, leave_type, start_date, end_date, reason, status, profiles(email)"
+        )
+        .gte("start_date", startDate)
+        .lte("start_date", endDate)
+        .order("start_date", { ascending: true }),
+    ]);
+
+    const rows: string[][] = [];
+
+    // Attendance section
+    rows.push(["=== 출퇴근 기록 ==="]);
+    rows.push(["이메일", "날짜", "출근시간", "퇴근시간", "출근장소", "퇴근장소", "근무시간(h)"]);
+    for (const r of attData ?? []) {
+      const email =
+        (r.profiles as unknown as { email: string })?.email ?? "";
+      let workedH = "";
+      if (r.clock_in && r.clock_out) {
+        const mins = Math.floor(
+          (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) /
+            60000
+        );
+        const worked = Math.max(0, mins - 60);
+        workedH = (worked / 60).toFixed(2);
+      }
+      rows.push([
+        email,
+        r.date,
+        r.clock_in
+          ? new Date(r.clock_in).toLocaleTimeString("ko-KR", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+              timeZone: "Asia/Seoul",
+            })
+          : "",
+        r.clock_out
+          ? new Date(r.clock_out).toLocaleTimeString("ko-KR", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+              timeZone: "Asia/Seoul",
+            })
+          : "",
+        LOCATION_LABELS[r.clock_in_location ?? ""] ?? r.clock_in_location ?? "",
+        LOCATION_LABELS[r.clock_out_location ?? ""] ?? r.clock_out_location ?? "",
+        workedH,
+      ]);
+    }
+
+    rows.push([]);
+    rows.push(["=== 휴가 기록 ==="]);
+    rows.push(["이메일", "휴가종류", "시작일", "종료일", "사유", "상태"]);
+    for (const r of leaveData ?? []) {
+      const email =
+        (r.profiles as unknown as { email: string })?.email ?? "";
+      rows.push([
+        email,
+        LEAVE_TYPE_LABELS[r.leave_type] ?? r.leave_type,
+        r.start_date,
+        r.end_date,
+        r.reason ?? "",
+        LEAVE_STATUS_LABELS[r.status] ?? r.status,
+      ]);
+    }
+
+    const csvContent =
+      "\uFEFF" +
+      rows
+        .map((row) =>
+          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+        )
+        .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `근태리포트_${csvMonth}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    setLoading(null);
+    showToast("success", "CSV 다운로드 완료!");
+  }
+
+  const TAB_BUTTONS: { key: TabType; label: string; visible: boolean }[] = [
+    { key: "records", label: "전체 기록", visible: true },
+    { key: "leaves", label: "휴가 관리", visible: isAdminOrMaster },
+    { key: "roles", label: "직원 권한 관리", visible: isMaster },
+  ];
 
   return (
     <div>
@@ -142,28 +322,38 @@ export default function AdminTabs({
       )}
 
       {/* Tabs */}
-      <div className="mb-6 flex gap-2">
-        <button
-          onClick={() => setTab("records")}
-          className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-            tab === "records"
-              ? "bg-gray-900 text-white"
-              : "bg-white text-gray-700 hover:bg-gray-100"
-          }`}
-        >
-          전체 기록
-        </button>
-        {isMaster && (
+      <div className="mb-6 flex flex-wrap gap-2">
+        {TAB_BUTTONS.filter((t) => t.visible).map((t) => (
           <button
-            onClick={() => setTab("roles")}
+            key={t.key}
+            onClick={() => setTab(t.key)}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-              tab === "roles"
+              tab === t.key
                 ? "bg-gray-900 text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
           >
-            직원 권한 관리
+            {t.label}
           </button>
+        ))}
+
+        {/* CSV Export button (master only, shown in records tab) */}
+        {isMaster && tab === "records" && (
+          <div className="ml-auto flex items-center gap-2">
+            <input
+              type="month"
+              value={csvMonth}
+              onChange={(e) => setCsvMonth(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+            />
+            <button
+              onClick={handleCsvExport}
+              disabled={loading === "csv"}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {loading === "csv" ? "생성 중..." : "월간 리포트 다운로드"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -198,7 +388,7 @@ export default function AdminTabs({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
@@ -318,6 +508,101 @@ export default function AdminTabs({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Leave Management Tab */}
+      {tab === "leaves" && isAdminOrMaster && (
+        <div>
+          <h2 className="mb-4 text-xl font-bold text-gray-900">휴가 관리</h2>
+
+          {leaveRequests.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">
+              휴가 신청 내역이 없습니다.
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">
+                      이메일
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">
+                      종류
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">
+                      기간
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">
+                      사유
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">
+                      상태
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">
+                      처리
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {leaveRequests.map((req) => (
+                    <tr key={req.id}>
+                      <td className="px-4 py-3 text-gray-900">{req.email}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                          {LEAVE_TYPE_LABELS[req.leave_type] ?? req.leave_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs text-gray-700">
+                        {req.start_date === req.end_date
+                          ? req.start_date
+                          : `${req.start_date}~${req.end_date}`}
+                      </td>
+                      <td className="max-w-[160px] px-4 py-3 text-center text-xs text-gray-500">
+                        <span className="line-clamp-2">
+                          {req.reason ?? "-"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_STATUS_COLORS[req.status] ?? LEAVE_STATUS_COLORS.pending}`}
+                        >
+                          {LEAVE_STATUS_LABELS[req.status] ?? req.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {req.status === "pending" ? (
+                          <div className="flex justify-center gap-2">
+                            <button
+                              onClick={() =>
+                                handleLeaveStatusChange(req.id, "approved")
+                              }
+                              disabled={loading === req.id}
+                              className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-50"
+                            >
+                              승인
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleLeaveStatusChange(req.id, "rejected")
+                              }
+                              disabled={loading === req.id}
+                              className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                            >
+                              반려
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">처리 완료</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

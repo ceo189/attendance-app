@@ -38,6 +38,14 @@ export default async function AdminPage() {
     .select("id, email, role")
     .order("email");
 
+  // Fetch all leave requests with user emails
+  const { data: leaveRecords } = await supabase
+    .from("leave_requests")
+    .select(
+      "id, user_id, leave_type, start_date, end_date, reason, status, created_at, profiles(email)"
+    )
+    .order("created_at", { ascending: false });
+
   const todayFormatted = new Date().toLocaleDateString("ko-KR", {
     year: "numeric",
     month: "long",
@@ -67,6 +75,18 @@ export default async function AdminPage() {
     role: p.role,
   }));
 
+  const leaveRequests = (leaveRecords ?? []).map((r) => ({
+    id: r.id,
+    user_id: r.user_id,
+    email: (r.profiles as unknown as { email: string })?.email ?? "",
+    leave_type: r.leave_type,
+    start_date: r.start_date,
+    end_date: r.end_date,
+    reason: r.reason,
+    status: r.status,
+    created_at: r.created_at,
+  }));
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
@@ -81,7 +101,9 @@ export default async function AdminPage() {
             </a>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">{user.email}</span>
+            <span className="hidden text-sm text-gray-500 sm:inline">
+              {user.email}
+            </span>
             <LogoutButton />
           </div>
         </div>
@@ -95,6 +117,7 @@ export default async function AdminPage() {
           profilesList={profilesList}
           totalEmployees={profilesList.length}
           totalPresent={attendanceList.length}
+          leaveRequests={leaveRequests}
         />
       </main>
     </div>

@@ -43,8 +43,26 @@ function getGPS(): Promise<{ lat: number; lng: number }> {
   });
 }
 
+async function sendNotify(
+  type: "clock_in" | "clock_out",
+  email: string,
+  time: string,
+  location: string
+) {
+  try {
+    await fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, email, time, location }),
+    });
+  } catch {
+    // Non-fatal
+  }
+}
+
 interface Props {
   userId: string;
+  userEmail: string;
   recordId: string | null;
   initialClockIn: string | null;
   initialClockOut: string | null;
@@ -55,6 +73,7 @@ interface Props {
 
 export default function AttendanceButtons({
   userId,
+  userEmail,
   recordId,
   initialClockIn,
   initialClockOut,
@@ -132,6 +151,7 @@ export default function AttendanceButtons({
         setCurrentRecordId(data.id);
         setSelectedLocation("");
         showToast("success", "출근 기록 완료!");
+        sendNotify("clock_in", userEmail, now, selectedLocation);
       }
     } catch (err) {
       showToast("error", `네트워크 오류: ${String(err)}`);
@@ -181,6 +201,7 @@ export default function AttendanceButtons({
         setClockOut(now);
         setClockOutLocation(selectedLocation);
         showToast("success", "퇴근 기록 완료!");
+        sendNotify("clock_out", userEmail, now, selectedLocation);
       }
     } catch (err) {
       showToast("error", `네트워크 오류: ${String(err)}`);
@@ -189,7 +210,7 @@ export default function AttendanceButtons({
   }
 
   function formatTime(iso: string | null) {
-    if (!iso) return "--:--:--";
+    if (!iso) return "--:--";
     return new Date(iso).toLocaleTimeString("ko-KR", {
       hour: "2-digit",
       minute: "2-digit",
