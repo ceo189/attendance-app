@@ -27,7 +27,7 @@ export default async function DashboardPage() {
   });
   const { data: todayRecord } = await supabase
     .from("attendance")
-    .select("id, clock_in, clock_out")
+    .select("id, clock_in, clock_out, location")
     .eq("user_id", user.id)
     .eq("date", today)
     .single();
@@ -43,7 +43,7 @@ export default async function DashboardPage() {
 
   const { data: weeklyRecords } = await supabase
     .from("attendance")
-    .select("date, clock_in, clock_out")
+    .select("date, clock_in, clock_out, location")
     .eq("user_id", user.id)
     .gte("date", mondayStr)
     .lte("date", today)
@@ -79,6 +79,7 @@ export default async function DashboardPage() {
               recordId={todayRecord?.id ?? null}
               initialClockIn={todayRecord?.clock_in ?? null}
               initialClockOut={todayRecord?.clock_out ?? null}
+              initialLocation={todayRecord?.location ?? null}
             />
           </div>
 

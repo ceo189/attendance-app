@@ -7,11 +7,18 @@ function getKoreanDate() {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 }
 
+const LOCATIONS = [
+  { value: "office", label: "사무실" },
+  { value: "outside", label: "외부" },
+  { value: "remote", label: "재택" },
+] as const;
+
 interface Props {
   userId: string;
   recordId: string | null;
   initialClockIn: string | null;
   initialClockOut: string | null;
+  initialLocation: string | null;
 }
 
 export default function AttendanceButtons({
@@ -19,9 +26,11 @@ export default function AttendanceButtons({
   recordId,
   initialClockIn,
   initialClockOut,
+  initialLocation,
 }: Props) {
   const [clockIn, setClockIn] = useState<string | null>(initialClockIn);
   const [clockOut, setClockOut] = useState<string | null>(initialClockOut);
+  const [location, setLocation] = useState<string>(initialLocation ?? "");
   const [currentRecordId, setCurrentRecordId] = useState<string | null>(
     recordId
   );
@@ -41,6 +50,10 @@ export default function AttendanceButtons({
   );
 
   async function handleClockIn() {
+    if (!location) {
+      showToast("error", "출근 장소를 선택해주세요.");
+      return;
+    }
     setLoading(true);
     try {
       const now = new Date().toISOString();
@@ -50,6 +63,7 @@ export default function AttendanceButtons({
           user_id: userId,
           date: getKoreanDate(),
           clock_in: now,
+          location,
         })
         .select("id")
         .single();
@@ -130,6 +144,31 @@ export default function AttendanceButtons({
           </p>
         </div>
       </div>
+
+      {!clockIn && (
+        <div className="flex justify-center">
+          <select
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="w-48 rounded-lg border border-gray-300 bg-white px-4 py-3 text-center text-sm font-medium text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          >
+            <option value="">-- 장소 선택 --</option>
+            {LOCATIONS.map((loc) => (
+              <option key={loc.value} value={loc.value}>
+                {loc.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {clockIn && (
+        <div className="text-center">
+          <span className="inline-block rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+            {LOCATIONS.find((l) => l.value === location)?.label ?? location}
+          </span>
+        </div>
+      )}
 
       <div className="flex justify-center gap-4">
         <button
