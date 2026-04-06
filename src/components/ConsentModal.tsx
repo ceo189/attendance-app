@@ -24,8 +24,8 @@ export default function ConsentModal({ userId }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-8 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-0 sm:items-center sm:pb-4">
+      <div className="w-full max-w-lg rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl sm:p-8">
         <h2 className="mb-4 text-xl font-bold text-gray-900">
           위치정보 수집 및 이용 동의 (필수)
         </h2>
@@ -39,7 +39,7 @@ export default function ConsentModal({ userId }: Props) {
         <button
           onClick={handleConsent}
           disabled={loading}
-          className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+          className="w-full rounded-lg bg-blue-600 py-3.5 text-base font-semibold text-white transition active:scale-[0.98] hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? "처리 중..." : "동의함"}
         </button>

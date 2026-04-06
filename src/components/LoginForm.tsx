@@ -42,12 +42,12 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
-        <h1 className="mb-2 text-center text-2xl font-bold text-gray-900">
+    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg sm:p-8">
+        <h1 className="mb-2 text-center text-xl font-bold text-gray-900 sm:text-2xl">
           근태관리 시스템
         </h1>
-        <p className="mb-8 text-center text-sm text-gray-500">
+        <p className="mb-6 text-center text-sm text-gray-500 sm:mb-8">
           {isSignUp ? "회사 이메일로 가입하세요" : "회사 이메일로 로그인하세요"}
         </p>
 
@@ -62,11 +62,14 @@ export default function LoginForm() {
             <input
               id="email"
               type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@company.com"
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
 
@@ -80,12 +83,13 @@ export default function LoginForm() {
             <input
               id="password"
               type="password"
+              autoComplete={isSignUp ? "new-password" : "current-password"}
               required
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="6자 이상"
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
 
@@ -98,7 +102,7 @@ export default function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-blue-600 py-3.5 text-base font-semibold text-white transition active:scale-[0.98] hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "처리 중..." : isSignUp ? "가입하기" : "로그인"}
           </button>
@@ -109,7 +113,7 @@ export default function LoginForm() {
             setIsSignUp(!isSignUp);
             setError("");
           }}
-          className="mt-4 w-full text-center text-sm text-blue-600 hover:underline"
+          className="mt-4 w-full py-2 text-center text-sm text-blue-600 hover:underline"
         >
           {isSignUp
             ? "이미 계정이 있으신가요? 로그인"
