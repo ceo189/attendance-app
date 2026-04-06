@@ -13,12 +13,22 @@ const LOCATIONS = [
   { value: "remote", label: "재택" },
 ] as const;
 
+function LocationBadge({ value }: { value: string }) {
+  const label = LOCATIONS.find((l) => l.value === value)?.label ?? value;
+  return (
+    <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+      {label}
+    </span>
+  );
+}
+
 interface Props {
   userId: string;
   recordId: string | null;
   initialClockIn: string | null;
   initialClockOut: string | null;
-  initialLocation: string | null;
+  initialClockInLocation: string | null;
+  initialClockOutLocation: string | null;
 }
 
 export default function AttendanceButtons({
@@ -26,11 +36,18 @@ export default function AttendanceButtons({
   recordId,
   initialClockIn,
   initialClockOut,
-  initialLocation,
+  initialClockInLocation,
+  initialClockOutLocation,
 }: Props) {
   const [clockIn, setClockIn] = useState<string | null>(initialClockIn);
   const [clockOut, setClockOut] = useState<string | null>(initialClockOut);
-  const [location, setLocation] = useState<string>(initialLocation ?? "");
+  const [clockInLocation, setClockInLocation] = useState<string>(
+    initialClockInLocation ?? ""
+  );
+  const [clockOutLocation, setClockOutLocation] = useState<string>(
+    initialClockOutLocation ?? ""
+  );
+  const [selectedLocation, setSelectedLocation] = useState<string>("");
   const [currentRecordId, setCurrentRecordId] = useState<string | null>(
     recordId
   );
@@ -50,7 +67,7 @@ export default function AttendanceButtons({
   );
 
   async function handleClockIn() {
-    if (!location) {
+    if (!selectedLocation) {
       showToast("error", "출근 장소를 선택해주세요.");
       return;
     }
@@ -63,7 +80,7 @@ export default function AttendanceButtons({
           user_id: userId,
           date: getKoreanDate(),
           clock_in: now,
-          location,
+          clock_in_location: selectedLocation,
         })
         .select("id")
         .single();
@@ -72,7 +89,9 @@ export default function AttendanceButtons({
         showToast("error", `출근 기록 실패: ${error.message}`);
       } else if (data) {
         setClockIn(now);
+        setClockInLocation(selectedLocation);
         setCurrentRecordId(data.id);
+        setSelectedLocation("");
         showToast("success", "출근 기록 완료!");
       }
     } catch (err) {
@@ -86,18 +105,23 @@ export default function AttendanceButtons({
       showToast("error", "출근 기록이 없어 퇴근 처리할 수 없습니다.");
       return;
     }
+    if (!selectedLocation) {
+      showToast("error", "퇴근 장소를 선택해주세요.");
+      return;
+    }
     setLoading(true);
     try {
       const now = new Date().toISOString();
       const { error } = await supabase
         .from("attendance")
-        .update({ clock_out: now })
+        .update({ clock_out: now, clock_out_location: selectedLocation })
         .eq("id", currentRecordId);
 
       if (error) {
         showToast("error", `퇴근 기록 실패: ${error.message}`);
       } else {
         setClockOut(now);
+        setClockOutLocation(selectedLocation);
         showToast("success", "퇴근 기록 완료!");
       }
     } catch (err) {
@@ -116,6 +140,9 @@ export default function AttendanceButtons({
     });
   }
 
+  // Show dropdown when: before clock-in, OR after clock-in but before clock-out
+  const showDropdown = !clockOut;
+
   return (
     <div className="space-y-6">
       {toast && (
@@ -126,47 +153,44 @@ export default function AttendanceButtons({
               : "bg-red-100 text-red-800"
           }`}
         >
-          {toast.type === "success" ? "\u{1F7E2}" : "\u{1F534}"} {toast.message}
+          {toast.type === "success" ? "\u{1F7E2}" : "\u{1F534}"}{" "}
+          {toast.message}
         </div>
       )}
 
       <div className="flex justify-center gap-8 text-center">
         <div>
-          <p className="text-sm text-gray-500">출근 시간</p>
+          <p className="text-sm text-gray-500">출근</p>
           <p className="text-lg font-semibold text-gray-900">
             {formatTime(clockIn)}
           </p>
+          {clockInLocation && <LocationBadge value={clockInLocation} />}
         </div>
         <div>
-          <p className="text-sm text-gray-500">퇴근 시간</p>
+          <p className="text-sm text-gray-500">퇴근</p>
           <p className="text-lg font-semibold text-gray-900">
             {formatTime(clockOut)}
           </p>
+          {clockOutLocation && <LocationBadge value={clockOutLocation} />}
         </div>
       </div>
 
-      {!clockIn && (
+      {showDropdown && (
         <div className="flex justify-center">
           <select
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
+            value={selectedLocation}
+            onChange={(e) => setSelectedLocation(e.target.value)}
             className="w-48 rounded-lg border border-gray-300 bg-white px-4 py-3 text-center text-sm font-medium text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           >
-            <option value="">-- 장소 선택 --</option>
+            <option value="">
+              -- {clockIn ? "퇴근" : "출근"} 장소 선택 --
+            </option>
             {LOCATIONS.map((loc) => (
               <option key={loc.value} value={loc.value}>
                 {loc.label}
               </option>
             ))}
           </select>
-        </div>
-      )}
-
-      {clockIn && (
-        <div className="text-center">
-          <span className="inline-block rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
-            {LOCATIONS.find((l) => l.value === location)?.label ?? location}
-          </span>
         </div>
       )}
 

@@ -8,7 +8,8 @@ interface AttendanceRecord {
   date: string;
   clock_in: string | null;
   clock_out: string | null;
-  location: string | null;
+  clock_in_location: string | null;
+  clock_out_location: string | null;
 }
 
 function formatTime(iso: string | null) {
@@ -29,6 +30,15 @@ function formatDate(dateStr: string) {
     day: "numeric",
     weekday: "short",
   });
+}
+
+function LocationBadge({ value }: { value: string | null }) {
+  if (!value) return <span className="text-gray-400">-</span>;
+  return (
+    <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+      {LOCATION_LABELS[value] ?? value}
+    </span>
+  );
 }
 
 export default function WeeklyRecords({
@@ -53,9 +63,6 @@ export default function WeeklyRecords({
               날짜
             </th>
             <th className="px-3 py-3 text-center font-medium text-gray-600">
-              장소
-            </th>
-            <th className="px-3 py-3 text-center font-medium text-gray-600">
               출근
             </th>
             <th className="px-3 py-3 text-center font-medium text-gray-600">
@@ -68,19 +75,12 @@ export default function WeeklyRecords({
             <tr key={r.date}>
               <td className="px-3 py-3 text-gray-900">{formatDate(r.date)}</td>
               <td className="px-3 py-3 text-center">
-                {r.location ? (
-                  <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                    {LOCATION_LABELS[r.location] ?? r.location}
-                  </span>
-                ) : (
-                  "-"
-                )}
+                <div className="text-gray-700">{formatTime(r.clock_in)}</div>
+                <LocationBadge value={r.clock_in_location} />
               </td>
-              <td className="px-3 py-3 text-center text-gray-700">
-                {formatTime(r.clock_in)}
-              </td>
-              <td className="px-3 py-3 text-center text-gray-700">
-                {formatTime(r.clock_out)}
+              <td className="px-3 py-3 text-center">
+                <div className="text-gray-700">{formatTime(r.clock_out)}</div>
+                <LocationBadge value={r.clock_out_location} />
               </td>
             </tr>
           ))}
