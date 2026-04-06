@@ -55,7 +55,7 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
           <h1 className="text-lg font-bold text-gray-900">근태관리</h1>
           <div className="flex items-center gap-3">
-            {profile?.role === "admin" && (
+            {(profile?.role === "admin" || profile?.role === "master") && (
               <a
                 href="/admin"
                 className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
