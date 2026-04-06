@@ -22,6 +22,27 @@ function LocationBadge({ value }: { value: string }) {
   );
 }
 
+function getGPS(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("이 브라우저에서 위치 정보를 지원하지 않습니다."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) =>
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => {
+        if (err.code === 1)
+          reject(new Error("위치 정보 접근 권한을 허용해 주세요."));
+        else if (err.code === 2)
+          reject(new Error("위치 정보를 가져올 수 없습니다."));
+        else reject(new Error("위치 정보 요청 시간이 초과되었습니다."));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+}
+
 interface Props {
   userId: string;
   recordId: string | null;
@@ -29,6 +50,7 @@ interface Props {
   initialClockOut: string | null;
   initialClockInLocation: string | null;
   initialClockOutLocation: string | null;
+  locationConsent: boolean;
 }
 
 export default function AttendanceButtons({
@@ -38,6 +60,7 @@ export default function AttendanceButtons({
   initialClockOut,
   initialClockInLocation,
   initialClockOutLocation,
+  locationConsent,
 }: Props) {
   const [clockIn, setClockIn] = useState<string | null>(initialClockIn);
   const [clockOut, setClockOut] = useState<string | null>(initialClockOut);
@@ -73,6 +96,21 @@ export default function AttendanceButtons({
     }
     setLoading(true);
     try {
+      let lat: number | null = null;
+      let lng: number | null = null;
+
+      if (locationConsent) {
+        try {
+          const gps = await getGPS();
+          lat = gps.lat;
+          lng = gps.lng;
+        } catch (gpsErr) {
+          showToast("error", (gpsErr as Error).message);
+          setLoading(false);
+          return;
+        }
+      }
+
       const now = new Date().toISOString();
       const { data, error } = await supabase
         .from("attendance")
@@ -81,6 +119,7 @@ export default function AttendanceButtons({
           date: getKoreanDate(),
           clock_in: now,
           clock_in_location: selectedLocation,
+          ...(lat !== null && { latitude: lat, longitude: lng }),
         })
         .select("id")
         .single();
@@ -111,10 +150,29 @@ export default function AttendanceButtons({
     }
     setLoading(true);
     try {
+      let lat: number | null = null;
+      let lng: number | null = null;
+
+      if (locationConsent) {
+        try {
+          const gps = await getGPS();
+          lat = gps.lat;
+          lng = gps.lng;
+        } catch (gpsErr) {
+          showToast("error", (gpsErr as Error).message);
+          setLoading(false);
+          return;
+        }
+      }
+
       const now = new Date().toISOString();
       const { error } = await supabase
         .from("attendance")
-        .update({ clock_out: now, clock_out_location: selectedLocation })
+        .update({
+          clock_out: now,
+          clock_out_location: selectedLocation,
+          ...(lat !== null && { latitude: lat, longitude: lng }),
+        })
         .eq("id", currentRecordId);
 
       if (error) {
@@ -140,7 +198,6 @@ export default function AttendanceButtons({
     });
   }
 
-  // Show dropdown when: before clock-in, OR after clock-in but before clock-out
   const showDropdown = !clockOut;
 
   return (

@@ -54,6 +54,8 @@ interface AttendanceItem {
   clock_out_location: string | null;
   updated_by: string | null;
   updated_at: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 interface ProfileItem {
@@ -217,6 +219,11 @@ export default function AdminTabs({
                   </th>
                   {isMaster && (
                     <th className="px-4 py-3 text-center font-medium text-gray-600">
+                      위치
+                    </th>
+                  )}
+                  {isMaster && (
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">
                       수정 이력
                     </th>
                   )}
@@ -275,6 +282,22 @@ export default function AdminTabs({
                           {status}
                         </span>
                       </td>
+                      {isMaster && (
+                        <td className="px-4 py-3 text-center text-xs">
+                          {att?.latitude && att?.longitude ? (
+                            <a
+                              href={`https://www.google.com/maps?q=${att.latitude},${att.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-block rounded bg-green-100 px-2 py-1 text-green-700 hover:bg-green-200"
+                            >
+                              지도 보기
+                            </a>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                      )}
                       {isMaster && (
                         <td className="px-4 py-3 text-center text-xs text-gray-400">
                           {att?.updated_by ? (

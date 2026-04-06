@@ -4,6 +4,7 @@ import Clock from "@/components/Clock";
 import AttendanceButtons from "@/components/AttendanceButtons";
 import WeeklyRecords from "@/components/WeeklyRecords";
 import LogoutButton from "@/components/LogoutButton";
+import ConsentModal from "@/components/ConsentModal";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -14,14 +15,12 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
-  // Get profile for role check
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, location_consent")
     .eq("id", user.id)
     .single();
 
-  // Get today's attendance (Korean timezone)
   const today = new Date().toLocaleDateString("sv-SE", {
     timeZone: "Asia/Seoul",
   });
@@ -32,7 +31,6 @@ export default async function DashboardPage() {
     .eq("date", today)
     .single();
 
-  // Get this week's records (Monday to Sunday)
   const now = new Date(
     new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" })
   );
@@ -49,8 +47,12 @@ export default async function DashboardPage() {
     .lte("date", today)
     .order("date", { ascending: false });
 
+  const needsConsent = !profile?.location_consent;
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {needsConsent && <ConsentModal userId={user.id} />}
+
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
           <h1 className="text-lg font-bold text-gray-900">근태관리</h1>
@@ -81,6 +83,7 @@ export default async function DashboardPage() {
               initialClockOut={todayRecord?.clock_out ?? null}
               initialClockInLocation={todayRecord?.clock_in_location ?? null}
               initialClockOutLocation={todayRecord?.clock_out_location ?? null}
+              locationConsent={!!profile?.location_consent}
             />
           </div>
 

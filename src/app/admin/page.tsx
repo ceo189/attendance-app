@@ -28,7 +28,7 @@ export default async function AdminPage() {
   const { data: records } = await supabase
     .from("attendance")
     .select(
-      "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, profiles(email)"
+      "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles(email)"
     )
     .eq("date", today)
     .order("clock_in", { ascending: true });
@@ -57,6 +57,8 @@ export default async function AdminPage() {
     clock_out_location: r.clock_out_location,
     updated_by: r.updated_by,
     updated_at: r.updated_at,
+    latitude: profile.role === "master" ? r.latitude : null,
+    longitude: profile.role === "master" ? r.longitude : null,
   }));
 
   const profilesList = (allProfiles ?? []).map((p) => ({
