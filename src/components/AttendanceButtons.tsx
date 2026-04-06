@@ -3,44 +3,56 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+function getKoreanDate() {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+}
+
 interface Props {
   userId: string;
+  recordId: string | null;
   initialClockIn: string | null;
   initialClockOut: string | null;
 }
 
 export default function AttendanceButtons({
   userId,
+  recordId,
   initialClockIn,
   initialClockOut,
 }: Props) {
   const [clockIn, setClockIn] = useState<string | null>(initialClockIn);
   const [clockOut, setClockOut] = useState<string | null>(initialClockOut);
+  const [currentRecordId, setCurrentRecordId] = useState<string | null>(recordId);
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
-
-  const todayStr = new Date().toISOString().split("T")[0];
 
   async function handleClockIn() {
     setLoading(true);
     const now = new Date().toISOString();
-    const { error } = await supabase.from("attendance").insert({
-      user_id: userId,
-      date: todayStr,
-      clock_in: now,
-    });
-    if (!error) setClockIn(now);
+    const { data, error } = await supabase
+      .from("attendance")
+      .insert({
+        user_id: userId,
+        date: getKoreanDate(),
+        clock_in: now,
+      })
+      .select("id")
+      .single();
+    if (!error && data) {
+      setClockIn(now);
+      setCurrentRecordId(data.id);
+    }
     setLoading(false);
   }
 
   async function handleClockOut() {
+    if (!currentRecordId) return;
     setLoading(true);
     const now = new Date().toISOString();
     const { error } = await supabase
       .from("attendance")
       .update({ clock_out: now })
-      .eq("user_id", userId)
-      .eq("date", todayStr);
+      .eq("id", currentRecordId);
     if (!error) setClockOut(now);
     setLoading(false);
   }

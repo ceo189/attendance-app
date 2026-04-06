@@ -21,21 +21,25 @@ export default async function DashboardPage() {
     .eq("id", user.id)
     .single();
 
-  // Get today's attendance
-  const today = new Date().toISOString().split("T")[0];
+  // Get today's attendance (Korean timezone)
+  const today = new Date().toLocaleDateString("sv-SE", {
+    timeZone: "Asia/Seoul",
+  });
   const { data: todayRecord } = await supabase
     .from("attendance")
-    .select("clock_in, clock_out")
+    .select("id, clock_in, clock_out")
     .eq("user_id", user.id)
     .eq("date", today)
     .single();
 
   // Get this week's records (Monday to Sunday)
-  const now = new Date();
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" })
+  );
   const dayOfWeek = now.getDay();
   const monday = new Date(now);
   monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-  const mondayStr = monday.toISOString().split("T")[0];
+  const mondayStr = monday.toLocaleDateString("sv-SE");
 
   const { data: weeklyRecords } = await supabase
     .from("attendance")
@@ -72,6 +76,7 @@ export default async function DashboardPage() {
           <div className="rounded-2xl bg-white p-6 shadow-sm">
             <AttendanceButtons
               userId={user.id}
+              recordId={todayRecord?.id ?? null}
               initialClockIn={todayRecord?.clock_in ?? null}
               initialClockOut={todayRecord?.clock_out ?? null}
             />
