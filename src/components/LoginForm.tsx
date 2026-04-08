@@ -21,45 +21,68 @@ export default function LoginForm() {
     setSuccess("");
     setLoading(true);
 
-    if (isSignUp) {
-      if (!name.trim()) {
-        setError("이름을 입력해주세요.");
-        setLoading(false);
-        return;
-      }
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: name.trim() },
-        },
-      });
-      if (error) {
-        setError(error.message);
+    try {
+      if (isSignUp) {
+        if (!name.trim()) {
+          setError("이름을 입력해주세요.");
+          setLoading(false);
+          return;
+        }
+        const { error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: name.trim() },
+          },
+        });
+        if (signUpError) {
+          setError(signUpError.message);
+          setLoading(false);
+          return;
+        }
+        // Auto-login after signup
+        const { error: loginError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (loginError) {
+          setSuccess("가입 완료! 로그인해주세요.");
+          setIsSignUp(false);
+          setName("");
+          setPassword("");
+        } else {
+          router.push("/dashboard");
+          router.refresh();
+          return;
+        }
       } else {
-        setSuccess("가입 완료! 로그인해주세요.");
-        setIsSignUp(false);
-        setName("");
-        setPassword("");
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) {
+          if (error.message === "Email not confirmed") {
+            setError("이메일 인증이 필요합니다. 관리자에게 문의하세요.");
+          } else if (error.message === "Invalid login credentials") {
+            setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+          } else {
+            setError(error.message);
+          }
+        } else {
+          router.push("/dashboard");
+          router.refresh();
+          return;
+        }
       }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) {
-        setError(error.message);
-      } else {
-        router.push("/dashboard");
-        router.refresh();
-      }
+    } catch (err) {
+      setError(`오류가 발생했습니다: ${String(err)}`);
     }
 
     setLoading(false);
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 pb-8">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg sm:p-8">
         <h1 className="mb-2 text-center text-xl font-bold text-gray-900 sm:text-2xl">
           근태관리 시스템
@@ -103,6 +126,8 @@ export default function LoginForm() {
               inputMode="email"
               autoComplete="email"
               autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -135,8 +160,13 @@ export default function LoginForm() {
             <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-600">
               가입 시 아래 사항에 동의하게 됩니다:
               <ul className="mt-1 ml-3 list-disc space-y-0.5">
-                <li>출퇴근 기록 및 근무시간 관리를 위한 개인정보(이름, 이메일) 수집 및 이용</li>
-                <li>위치정보(GPS) 수집 및 이용 (출퇴근 증빙 목적, 별도 동의)</li>
+                <li>
+                  출퇴근 기록 및 근무시간 관리를 위한 개인정보(이름, 이메일)
+                  수집 및 이용
+                </li>
+                <li>
+                  위치정보(GPS) 수집 및 이용 (출퇴근 증빙 목적, 별도 동의)
+                </li>
                 <li>근태 데이터의 회사 내 관리자 제공 (3자 제공)</li>
               </ul>
             </div>
