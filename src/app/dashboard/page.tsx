@@ -4,6 +4,7 @@ import Clock from "@/components/Clock";
 import AttendanceButtons from "@/components/AttendanceButtons";
 import WeeklyRecords from "@/components/WeeklyRecords";
 import LogoutButton from "@/components/LogoutButton";
+import ChangePasswordButton from "@/components/ChangePasswordButton";
 import ConsentModal from "@/components/ConsentModal";
 import ProfileCompleteModal from "@/components/ProfileCompleteModal";
 import WorkingHoursSummary from "@/components/WorkingHoursSummary";
@@ -80,6 +81,7 @@ export default async function DashboardPage() {
             <span className="hidden text-sm text-gray-500 sm:inline">
               {user.email}
             </span>
+            <ChangePasswordButton />
             <LogoutButton />
           </div>
         </div>
