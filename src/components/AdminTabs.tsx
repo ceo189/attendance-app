@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const LOCATION_LABELS: Record<string, string> = {
@@ -111,6 +111,27 @@ interface Props {
 
 type TabType = "records" | "leaves" | "roles";
 
+interface MonthlyStatRow {
+  userId: string;
+  name: string;
+  email: string;
+  daysWorked: number;
+  avgClockIn: string;
+  avgClockOut: string;
+  avgWorkedHours: string;
+  totalWorkedHours: string;
+}
+
+function todayDateString() {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+}
+
+function minutesToHHMM(totalMinutes: number) {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 export default function AdminTabs({
   role,
   todayFormatted,
@@ -132,9 +153,147 @@ export default function AdminTabs({
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  // Date picker state — defaults to today
+  const [selectedDate, setSelectedDate] = useState<string>(todayDateString);
+  const [dateAttendance, setDateAttendance] = useState<AttendanceItem[]>(attendanceList);
+  const [dateLoading, setDateLoading] = useState(false);
+
+  // Monthly stats
+  const [showMonthlyStats, setShowMonthlyStats] = useState(false);
+  const [monthlyStats, setMonthlyStats] = useState<MonthlyStatRow[]>([]);
+  const [monthlyStatsLoading, setMonthlyStatsLoading] = useState(false);
+
   const supabase = createClient();
   const isMaster = role === "master";
   const isAdminOrMaster = role === "admin" || role === "master";
+
+  // Fetch attendance for a specific date
+  const fetchDateAttendance = useCallback(
+    async (date: string) => {
+      setDateLoading(true);
+      const { data } = await supabase
+        .from("attendance")
+        .select(
+          "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles(email)"
+        )
+        .eq("date", date)
+        .order("clock_in", { ascending: true });
+
+      const list: AttendanceItem[] = (data ?? []).map((r) => ({
+        id: r.id,
+        user_id: r.user_id,
+        email: (r.profiles as unknown as { email: string })?.email ?? "",
+        clock_in: r.clock_in,
+        clock_out: r.clock_out,
+        clock_in_location: r.clock_in_location,
+        clock_out_location: r.clock_out_location,
+        updated_by: r.updated_by,
+        updated_at: r.updated_at,
+        latitude: isMaster ? r.latitude : null,
+        longitude: isMaster ? r.longitude : null,
+      }));
+      setDateAttendance(list);
+      setDateLoading(false);
+    },
+    [supabase, isMaster]
+  );
+
+  // When selectedDate changes (and it's not the initial today), refetch
+  useEffect(() => {
+    const today = todayDateString();
+    if (selectedDate !== today) {
+      fetchDateAttendance(selectedDate);
+    }
+    // For today we already have the server-side data
+  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset to server data when switching back to today
+  useEffect(() => {
+    if (selectedDate === todayDateString()) {
+      setDateAttendance(attendanceList);
+    }
+  }, [selectedDate, attendanceList]);
+
+  // Fetch and compute monthly stats
+  const fetchMonthlyStats = useCallback(
+    async (month: string) => {
+      setMonthlyStatsLoading(true);
+      const [year, mon] = month.split("-");
+      const startDate = `${year}-${mon}-01`;
+      const lastDay = new Date(Number(year), Number(mon), 0).getDate();
+      const endDate = `${year}-${mon}-${String(lastDay).padStart(2, "0")}`;
+
+      const { data } = await supabase
+        .from("attendance")
+        .select(
+          "user_id, clock_in, clock_out, profiles(email)"
+        )
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .not("clock_in", "is", null);
+
+      // Group by user_id
+      const grouped = new Map<string, { clockIns: number[]; clockOuts: number[]; workedMins: number[] }>();
+      for (const r of data ?? []) {
+        const uid = r.user_id;
+        if (!grouped.has(uid)) grouped.set(uid, { clockIns: [], clockOuts: [], workedMins: [] });
+        const entry = grouped.get(uid)!;
+        if (r.clock_in) {
+          const ciSeoul = new Date(new Date(r.clock_in).toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+          entry.clockIns.push(ciSeoul.getHours() * 60 + ciSeoul.getMinutes());
+        }
+        if (r.clock_out) {
+          const coSeoul = new Date(new Date(r.clock_out).toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+          grouped.get(uid)!.clockOuts.push(coSeoul.getHours() * 60 + coSeoul.getMinutes());
+        }
+        if (r.clock_in && r.clock_out) {
+          const diffMins = Math.floor(
+            (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 60000
+          );
+          grouped.get(uid)!.workedMins.push(Math.max(0, diffMins - 60));
+        }
+      }
+
+      // Build profile map
+      const profileMap = new Map(profiles.map((p) => [p.id, p]));
+
+      const rows: MonthlyStatRow[] = [];
+      for (const [uid, stats] of grouped.entries()) {
+        const p = profileMap.get(uid);
+        if (!p) continue;
+        const daysWorked = stats.clockIns.length;
+        const avgCi = daysWorked > 0 ? Math.round(stats.clockIns.reduce((a, b) => a + b, 0) / daysWorked) : 0;
+        const avgCo = stats.clockOuts.length > 0 ? Math.round(stats.clockOuts.reduce((a, b) => a + b, 0) / stats.clockOuts.length) : 0;
+        const totalWorked = stats.workedMins.reduce((a, b) => a + b, 0);
+        const avgWorked = stats.workedMins.length > 0 ? Math.round(totalWorked / stats.workedMins.length) : 0;
+
+        rows.push({
+          userId: uid,
+          name: p.name || p.email.split("@")[0],
+          email: p.email,
+          daysWorked,
+          avgClockIn: minutesToHHMM(avgCi),
+          avgClockOut: avgCo > 0 ? minutesToHHMM(avgCo) : "-",
+          avgWorkedHours: avgWorked > 0 ? minutesToHHMM(avgWorked) : "-",
+          totalWorkedHours: totalWorked > 0 ? minutesToHHMM(totalWorked) : "-",
+        });
+      }
+
+      // Sort by name
+      rows.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+      setMonthlyStats(rows);
+      setMonthlyStatsLoading(false);
+    },
+    [supabase, profiles]
+  );
+
+  // Load monthly stats when toggled on or month changes
+  useEffect(() => {
+    if (showMonthlyStats) {
+      fetchMonthlyStats(csvMonth);
+    }
+  }, [showMonthlyStats, csvMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = useCallback(
     (type: "success" | "error", message: string) => {
@@ -147,8 +306,9 @@ export default function AdminTabs({
   // Build email lookup for updated_by display
   const emailMap = new Map(profiles.map((p) => [p.id, p.email]));
 
-  // Build attendance lookup by email
-  const attendanceMap = new Map(attendanceList.map((a) => [a.email, a]));
+  // Build attendance lookup by email (uses date-selected data)
+  const attendanceMap = new Map(dateAttendance.map((a) => [a.email, a]));
+  const presentCount = dateAttendance.length;
 
   async function handleResetPassword(profileId: string, profileEmail: string) {
     const tempPw = `Grovit${Math.floor(1000 + Math.random() * 9000)}!`;
@@ -389,11 +549,19 @@ export default function AdminTabs({
       {/* Records Tab */}
       {tab === "records" && (
         <div>
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900">
-              오늘의 출퇴근 현황
-            </h2>
-            <p className="text-sm text-gray-500">{todayFormatted}</p>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold text-gray-900">출퇴근 현황</h2>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+              />
+              {selectedDate === todayDateString() && (
+                <span className="text-sm text-gray-500">{todayFormatted}</span>
+              )}
+            </div>
           </div>
 
           <div className="mb-4 flex gap-4">
@@ -406,17 +574,20 @@ export default function AdminTabs({
             <div className="rounded-xl bg-white p-4 shadow-sm">
               <p className="text-sm text-gray-500">출근</p>
               <p className="text-2xl font-bold text-green-600">
-                {totalPresent}
+                {presentCount}
               </p>
             </div>
             <div className="rounded-xl bg-white p-4 shadow-sm">
               <p className="text-sm text-gray-500">미출근</p>
               <p className="text-2xl font-bold text-red-500">
-                {totalEmployees - totalPresent}
+                {totalEmployees - presentCount}
               </p>
             </div>
           </div>
 
+          {dateLoading ? (
+            <div className="py-12 text-center text-sm text-gray-400">불러오는 중...</div>
+          ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
@@ -554,6 +725,68 @@ export default function AdminTabs({
                 })}
               </tbody>
             </table>
+          </div>
+          )}
+
+          {/* Monthly Stats Toggle */}
+          <div className="mt-8">
+            <button
+              onClick={() => setShowMonthlyStats((v) => !v)}
+              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+            >
+              <span>{showMonthlyStats ? "▲" : "▼"}</span>
+              <span>월간 통계</span>
+              <span className="text-gray-400">({csvMonth})</span>
+            </button>
+
+            {showMonthlyStats && (
+              <div className="mt-4">
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium text-gray-700">조회 월</span>
+                  <input
+                    type="month"
+                    value={csvMonth}
+                    onChange={(e) => setCsvMonth(e.target.value)}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                {monthlyStatsLoading ? (
+                  <div className="py-8 text-center text-sm text-gray-400">통계 계산 중...</div>
+                ) : monthlyStats.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-gray-400">해당 월의 출퇴근 기록이 없습니다.</div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium text-gray-600">이름</th>
+                          <th className="px-4 py-3 text-center font-medium text-gray-600">출근 일수</th>
+                          <th className="px-4 py-3 text-center font-medium text-gray-600">평균 출근시간</th>
+                          <th className="px-4 py-3 text-center font-medium text-gray-600">평균 퇴근시간</th>
+                          <th className="px-4 py-3 text-center font-medium text-gray-600">평균 근무시간</th>
+                          <th className="px-4 py-3 text-center font-medium text-gray-600">총 근무시간</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {monthlyStats.map((row) => (
+                          <tr key={row.userId}>
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-gray-900">{row.name}</div>
+                              <div className="text-xs text-gray-400">{row.email}</div>
+                            </td>
+                            <td className="px-4 py-3 text-center text-gray-700">{row.daysWorked}일</td>
+                            <td className="px-4 py-3 text-center text-gray-700">{row.avgClockIn}</td>
+                            <td className="px-4 py-3 text-center text-gray-700">{row.avgClockOut}</td>
+                            <td className="px-4 py-3 text-center text-gray-700">{row.avgWorkedHours}</td>
+                            <td className="px-4 py-3 text-center text-gray-700">{row.totalWorkedHours}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
