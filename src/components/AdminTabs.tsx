@@ -87,7 +87,22 @@ interface ProfileItem {
   position: string;
   title: string;
   team: string;
+  status: string;
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  active: "재직",
+  inactive: "비활성",
+  leave: "휴직",
+  resigned: "퇴사",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  active: "bg-green-100 text-green-700",
+  inactive: "bg-gray-100 text-gray-500",
+  leave: "bg-yellow-100 text-yellow-700",
+  resigned: "bg-red-100 text-red-600",
+};
 
 export interface LeaveRequestItem {
   id: string;
@@ -406,6 +421,48 @@ export default function AdminTabs({
       showToast("error", `비밀번호 초기화 실패: ${data.error}`);
     } else {
       showToast("success", `임시 비밀번호: ${tempPw} (직원에게 전달해주세요)`);
+    }
+    setLoading(null);
+  }
+
+  async function handleStatusChange(profileId: string, currentStatus: string) {
+    const newStatus = currentStatus === "active" ? "inactive" : "active";
+    const label = newStatus === "inactive" ? "비활성화" : "활성화";
+    if (!window.confirm(`이 직원을 ${label}하시겠습니까?`)) return;
+
+    setLoading(`status-${profileId}`);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ status: newStatus })
+      .eq("id", profileId);
+
+    if (error) {
+      showToast("error", `상태 변경 실패: ${error.message}`);
+    } else {
+      setProfiles((prev) =>
+        prev.map((p) => (p.id === profileId ? { ...p, status: newStatus } : p))
+      );
+      showToast("success", `${label} 처리되었습니다.`);
+    }
+    setLoading(null);
+  }
+
+  async function handleDeleteUser(profileId: string, profileEmail: string) {
+    if (!window.confirm(`정말 ${profileEmail} 계정을 삭제하시겠습니까?\n\n삭제 후 복구할 수 없으며, 모든 출퇴근 기록도 함께 삭제됩니다.`)) return;
+
+    setLoading(`delete-${profileId}`);
+    const res = await fetch("/api/delete-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: profileId }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      showToast("error", `삭제 실패: ${data.error}`);
+    } else {
+      setProfiles((prev) => prev.filter((p) => p.id !== profileId));
+      showToast("success", `${profileEmail} 계정이 삭제되었습니다.`);
     }
     setLoading(null);
   }
@@ -1281,7 +1338,10 @@ export default function AdminTabs({
                     현재 권한
                   </th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600">
-                    변경
+                    상태
+                  </th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">
+                    관리
                   </th>
                 </tr>
               </thead>
@@ -1368,6 +1428,13 @@ export default function AdminTabs({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
+                      <span
+                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[p.status] ?? STATUS_COLORS.active}`}
+                      >
+                        {STATUS_LABELS[p.status] ?? p.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       {editingId === p.id ? (
                         <div className="flex flex-col items-center gap-1.5">
                           <button
@@ -1423,6 +1490,28 @@ export default function AdminTabs({
                             className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
                           >
                             {loading === `reset-${p.id}` ? "..." : "비밀번호 초기화"}
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange(p.id, p.status)}
+                            disabled={loading === `status-${p.id}`}
+                            className={`w-full rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                              p.status === "active"
+                                ? "border border-yellow-400 text-yellow-700 hover:bg-yellow-50"
+                                : "border border-green-400 text-green-700 hover:bg-green-50"
+                            } disabled:opacity-50`}
+                          >
+                            {loading === `status-${p.id}`
+                              ? "..."
+                              : p.status === "active"
+                                ? "비활성화 (휴직/퇴사)"
+                                : "다시 활성화"}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(p.id, p.email)}
+                            disabled={loading === `delete-${p.id}`}
+                            className="w-full rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {loading === `delete-${p.id}` ? "..." : "계정 삭제"}
                           </button>
                         </div>
                       )}
