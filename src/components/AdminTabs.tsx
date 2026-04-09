@@ -29,13 +29,15 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 };
 
 const LEAVE_STATUS_LABELS: Record<string, string> = {
-  pending: "검토중",
-  approved: "승인",
+  pending: "팀장 검토중",
+  admin_approved: "대표 검토중",
+  approved: "최종 승인",
   rejected: "반려",
 };
 
 const LEAVE_STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
+  admin_approved: "bg-blue-100 text-blue-700",
   approved: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-700",
 };
@@ -96,6 +98,12 @@ export interface LeaveRequestItem {
   end_date: string;
   reason: string | null;
   status: string;
+  admin_status: string;
+  master_status: string;
+  admin_processed_by: string | null;
+  master_processed_by: string | null;
+  admin_processed_at: string | null;
+  master_processed_at: string | null;
   created_at: string;
 }
 
@@ -109,7 +117,7 @@ interface Props {
   leaveRequests: LeaveRequestItem[];
 }
 
-type TabType = "records" | "leaves" | "roles";
+type TabType = "records" | "leaves" | "roles" | "orgchart";
 
 interface MonthlyStatRow {
   userId: string;
@@ -416,23 +424,60 @@ export default function AdminTabs({
 
   async function handleLeaveStatusChange(
     leaveId: string,
-    newStatus: "approved" | "rejected"
+    action: "approved" | "rejected",
+    step: "admin" | "master"
   ) {
     setLoading(leaveId);
+
+    // Get current user id
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    const now = new Date().toISOString();
+
+    let updatePayload: Record<string, string | null> = {};
+
+    if (step === "admin") {
+      const newStatus = action === "rejected" ? "rejected" : "admin_approved";
+      updatePayload = {
+        admin_status: action,
+        admin_processed_by: currentUser?.id ?? null,
+        admin_processed_at: now,
+        status: newStatus,
+      };
+    } else {
+      // master step — only relevant when admin already approved
+      const newStatus = action === "approved" ? "approved" : "rejected";
+      updatePayload = {
+        master_status: action,
+        master_processed_by: currentUser?.id ?? null,
+        master_processed_at: now,
+        status: newStatus,
+      };
+    }
+
     const { error } = await supabase
       .from("leave_requests")
-      .update({ status: newStatus })
+      .update(updatePayload)
       .eq("id", leaveId);
 
     if (error) {
       showToast("error", `상태 변경 실패: ${error.message}`);
     } else {
       setLeaveRequests((prev) =>
-        prev.map((r) => (r.id === leaveId ? { ...r, status: newStatus } : r))
+        prev.map((r) =>
+          r.id === leaveId
+            ? {
+                ...r,
+                ...updatePayload,
+                admin_status: (updatePayload.admin_status as string) ?? r.admin_status,
+                master_status: (updatePayload.master_status as string) ?? r.master_status,
+                status: updatePayload.status as string,
+              }
+            : r
+        )
       );
       showToast(
         "success",
-        newStatus === "approved" ? "휴가 신청이 승인되었습니다." : "휴가 신청이 반려되었습니다."
+        action === "approved" ? "승인되었습니다." : "반려되었습니다."
       );
     }
     setLoading(null);
@@ -551,6 +596,7 @@ export default function AdminTabs({
     { key: "records", label: "전체 기록", visible: true },
     { key: "leaves", label: "휴가 관리", visible: isAdminOrMaster },
     { key: "roles", label: "직원 권한 관리", visible: isMaster },
+    { key: "orgchart", label: "조직도", visible: isMaster },
   ];
 
   return (
@@ -875,7 +921,7 @@ export default function AdminTabs({
                       사유
                     </th>
                     <th className="px-4 py-3 text-center font-medium text-gray-600">
-                      상태
+                      결재 현황
                     </th>
                     <th className="px-4 py-3 text-center font-medium text-gray-600">
                       처리
@@ -883,63 +929,216 @@ export default function AdminTabs({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {leaveRequests.map((req) => (
-                    <tr key={req.id}>
-                      <td className="px-4 py-3 text-gray-900">{req.email}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                          {LEAVE_TYPE_LABELS[req.leave_type] ?? req.leave_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center text-xs text-gray-700">
-                        {req.start_date === req.end_date
-                          ? req.start_date
-                          : `${req.start_date}~${req.end_date}`}
-                      </td>
-                      <td className="max-w-[160px] px-4 py-3 text-center text-xs text-gray-500">
-                        <span className="line-clamp-2">
-                          {req.reason ?? "-"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_STATUS_COLORS[req.status] ?? LEAVE_STATUS_COLORS.pending}`}
-                        >
-                          {LEAVE_STATUS_LABELS[req.status] ?? req.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {req.status === "pending" ? (
-                          <div className="flex justify-center gap-2">
-                            <button
-                              onClick={() =>
-                                handleLeaveStatusChange(req.id, "approved")
-                              }
-                              disabled={loading === req.id}
-                              className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-50"
+                  {leaveRequests.map((req) => {
+                    const canAdminAct = role === "admin" && req.admin_status === "pending";
+                    const canMasterAct = role === "master" && req.admin_status === "approved" && req.master_status === "pending";
+                    return (
+                      <tr key={req.id}>
+                        <td className="px-4 py-3 text-gray-900">{req.email}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                            {LEAVE_TYPE_LABELS[req.leave_type] ?? req.leave_type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-gray-700">
+                          {req.start_date === req.end_date
+                            ? req.start_date
+                            : `${req.start_date}~${req.end_date}`}
+                        </td>
+                        <td className="max-w-[160px] px-4 py-3 text-center text-xs text-gray-500">
+                          <span className="line-clamp-2">
+                            {req.reason ?? "-"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span
+                              className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${LEAVE_STATUS_COLORS[req.status] ?? LEAVE_STATUS_COLORS.pending}`}
                             >
-                              승인
-                            </button>
-                            <button
-                              onClick={() =>
-                                handleLeaveStatusChange(req.id, "rejected")
-                              }
-                              disabled={loading === req.id}
-                              className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
-                            >
-                              반려
-                            </button>
+                              {LEAVE_STATUS_LABELS[req.status] ?? req.status}
+                            </span>
+                            <div className="mt-1 flex items-center gap-1 text-xs text-gray-400">
+                              <span
+                                className={
+                                  req.admin_status === "approved"
+                                    ? "text-green-600 font-medium"
+                                    : req.admin_status === "rejected"
+                                      ? "text-red-500 font-medium"
+                                      : "text-gray-400"
+                                }
+                              >
+                                팀장{req.admin_status === "approved" ? "✓" : req.admin_status === "rejected" ? "✗" : "…"}
+                              </span>
+                              <span className="text-gray-300">→</span>
+                              <span
+                                className={
+                                  req.master_status === "approved"
+                                    ? "text-green-600 font-medium"
+                                    : req.master_status === "rejected"
+                                      ? "text-red-500 font-medium"
+                                      : req.admin_status === "approved"
+                                        ? "text-gray-500"
+                                        : "text-gray-300"
+                                }
+                              >
+                                대표{req.master_status === "approved" ? "✓" : req.master_status === "rejected" ? "✗" : "…"}
+                              </span>
+                            </div>
+                            {req.admin_processed_at && (
+                              <span className="text-xs text-gray-400">
+                                팀장: {formatDateTime(req.admin_processed_at)}
+                              </span>
+                            )}
+                            {req.master_processed_at && (
+                              <span className="text-xs text-gray-400">
+                                대표: {formatDateTime(req.master_processed_at)}
+                              </span>
+                            )}
                           </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">처리 완료</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {canAdminAct ? (
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={() => handleLeaveStatusChange(req.id, "approved", "admin")}
+                                disabled={loading === req.id}
+                                className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-50"
+                              >
+                                승인
+                              </button>
+                              <button
+                                onClick={() => handleLeaveStatusChange(req.id, "rejected", "admin")}
+                                disabled={loading === req.id}
+                                className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                              >
+                                반려
+                              </button>
+                            </div>
+                          ) : canMasterAct ? (
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={() => handleLeaveStatusChange(req.id, "approved", "master")}
+                                disabled={loading === req.id}
+                                className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-50"
+                              >
+                                최종 승인
+                              </button>
+                              <button
+                                onClick={() => handleLeaveStatusChange(req.id, "rejected", "master")}
+                                disabled={loading === req.id}
+                                className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                              >
+                                반려
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">
+                              {req.status === "approved" ? "최종 승인됨" : req.status === "rejected" ? "반려됨" : "대기중"}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Org Chart Tab (Master only) */}
+      {tab === "orgchart" && isMaster && (
+        <div>
+          <h2 className="mb-6 text-xl font-bold text-gray-900">조직도</h2>
+
+          {/* CEO / Master row */}
+          {(() => {
+            const masterProfiles = profiles.filter((p) => p.role === "master" || p.title === "대표이사");
+            const teamMap = new Map<string, ProfileItem[]>();
+            const unassigned: ProfileItem[] = [];
+
+            for (const p of profiles) {
+              if (p.role === "master" || p.title === "대표이사") continue;
+              if (p.team) {
+                const arr = teamMap.get(p.team) ?? [];
+                arr.push(p);
+                teamMap.set(p.team, arr);
+              } else {
+                unassigned.push(p);
+              }
+            }
+
+            return (
+              <div className="space-y-8">
+                {/* Master / CEO */}
+                <div className="flex flex-col items-center">
+                  {masterProfiles.map((p) => (
+                    <div key={p.id} className="rounded-2xl border-2 border-amber-400 bg-amber-50 px-8 py-4 text-center shadow-sm">
+                      <div className="text-base font-bold text-gray-900">{p.name || p.email.split("@")[0]}</div>
+                      <div className="mt-0.5 text-sm text-amber-700">{p.title || "대표이사"}</div>
+                      <div className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">마스터</div>
+                    </div>
+                  ))}
+                  {masterProfiles.length > 0 && (
+                    <div className="h-8 w-0.5 bg-gray-300" />
+                  )}
+                </div>
+
+                {/* Teams grid */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {Array.from(teamMap.entries()).map(([teamName, members]) => (
+                    <div key={teamName} className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                      <div className="rounded-t-xl bg-gray-800 px-4 py-2">
+                        <h3 className="text-sm font-bold text-white">{teamName}</h3>
+                        <p className="text-xs text-gray-400">{members.length}명</p>
+                      </div>
+                      <div className="divide-y divide-gray-100 p-2">
+                        {members.map((m) => (
+                          <div key={m.id} className="flex items-center justify-between px-2 py-2">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{m.name || m.email.split("@")[0]}</div>
+                              {(m.title || m.position) && (
+                                <div className="text-xs text-gray-500">{[m.title, m.position].filter(Boolean).join(" / ")}</div>
+                              )}
+                            </div>
+                            <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[m.role] ?? ROLE_COLORS.employee}`}>
+                              {ROLE_LABELS[m.role] ?? m.role}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Unassigned */}
+                  {unassigned.length > 0 && (
+                    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 shadow-sm">
+                      <div className="rounded-t-xl bg-gray-200 px-4 py-2">
+                        <h3 className="text-sm font-bold text-gray-600">미배정</h3>
+                        <p className="text-xs text-gray-400">{unassigned.length}명</p>
+                      </div>
+                      <div className="divide-y divide-gray-100 p-2">
+                        {unassigned.map((m) => (
+                          <div key={m.id} className="flex items-center justify-between px-2 py-2">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{m.name || m.email.split("@")[0]}</div>
+                              {(m.title || m.position) && (
+                                <div className="text-xs text-gray-500">{[m.title, m.position].filter(Boolean).join(" / ")}</div>
+                              )}
+                            </div>
+                            <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[m.role] ?? ROLE_COLORS.employee}`}>
+                              {ROLE_LABELS[m.role] ?? m.role}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

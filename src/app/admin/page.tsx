@@ -42,7 +42,7 @@ export default async function AdminPage() {
   const { data: leaveRecords } = await supabase
     .from("leave_requests")
     .select(
-      "id, user_id, leave_type, start_date, end_date, reason, status, created_at, profiles(email)"
+      "id, user_id, leave_type, start_date, end_date, reason, status, admin_status, master_status, admin_processed_by, master_processed_by, admin_processed_at, master_processed_at, created_at, profiles(email)"
     )
     .order("created_at", { ascending: false });
 
@@ -88,6 +88,12 @@ export default async function AdminPage() {
     end_date: r.end_date,
     reason: r.reason,
     status: r.status,
+    admin_status: r.admin_status ?? "pending",
+    master_status: r.master_status ?? "pending",
+    admin_processed_by: r.admin_processed_by ?? null,
+    master_processed_by: r.master_processed_by ?? null,
+    admin_processed_at: r.admin_processed_at ?? null,
+    master_processed_at: r.master_processed_at ?? null,
     created_at: r.created_at,
   }));
 

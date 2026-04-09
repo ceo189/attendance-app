@@ -184,7 +184,6 @@ export default function LoginForm() {
                     <option value="상무">상무</option>
                     <option value="대표이사">대표이사</option>
                   </select>
-                  />
                 </div>
               </div>
             </>

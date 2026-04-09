@@ -10,13 +10,15 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: "검토중",
-  approved: "승인",
+  pending: "팀장 승인 대기",
+  admin_approved: "대표 승인 대기",
+  approved: "승인완료",
   rejected: "반려",
 };
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
+  admin_approved: "bg-blue-100 text-blue-700",
   approved: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-700",
 };
@@ -28,6 +30,8 @@ export interface LeaveRequest {
   end_date: string;
   reason: string | null;
   status: string;
+  admin_status?: string;
+  master_status?: string;
   created_at: string;
 }
 
@@ -70,6 +74,36 @@ export default function LeaveList({ requests }: Props) {
               <p className="mt-0.5 truncate text-xs text-gray-500">
                 {req.reason}
               </p>
+            )}
+            {/* Two-step approval chain indicator */}
+            {req.admin_status !== undefined && (
+              <div className="mt-1 flex items-center gap-1 text-xs text-gray-400">
+                <span
+                  className={
+                    req.admin_status === "approved"
+                      ? "text-green-600 font-medium"
+                      : req.admin_status === "rejected"
+                        ? "text-red-500 font-medium"
+                        : "text-gray-400"
+                  }
+                >
+                  팀장{req.admin_status === "approved" ? "✓" : req.admin_status === "rejected" ? "✗" : "…"}
+                </span>
+                <span className="text-gray-300">→</span>
+                <span
+                  className={
+                    req.master_status === "approved"
+                      ? "text-green-600 font-medium"
+                      : req.master_status === "rejected"
+                        ? "text-red-500 font-medium"
+                        : req.admin_status === "approved"
+                          ? "text-gray-500"
+                          : "text-gray-300"
+                  }
+                >
+                  대표{req.master_status === "approved" ? "✓" : req.master_status === "rejected" ? "✗" : "…"}
+                </span>
+              </div>
             )}
           </div>
           <span

@@ -23,7 +23,7 @@ export default function LeaveSection({
   async function refreshRequests() {
     const { data } = await supabase
       .from("leave_requests")
-      .select("id, leave_type, start_date, end_date, reason, status, created_at")
+      .select("id, leave_type, start_date, end_date, reason, status, admin_status, master_status, created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(10);
