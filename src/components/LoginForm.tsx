@@ -147,14 +147,20 @@ export default function LoginForm() {
                   >
                     팀 <span className="font-normal text-gray-400">(선택)</span>
                   </label>
-                  <input
+                  <select
                     id="team"
-                    type="text"
                     value={team}
                     onChange={(e) => setTeam(e.target.value)}
-                    placeholder="개발팀"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="">선택</option>
+                    <option value="MD">MD</option>
+                    <option value="마케팅">마케팅</option>
+                    <option value="경영지원">경영지원</option>
+                    <option value="기획/전략">기획/전략</option>
+                    <option value="콘텐츠">콘텐츠</option>
+                    <option value="디자인">디자인</option>
+                  </select>
                 </div>
                 <div className="flex-1">
                   <label
@@ -163,13 +169,21 @@ export default function LoginForm() {
                   >
                     직책 <span className="font-normal text-gray-400">(선택)</span>
                   </label>
-                  <input
+                  <select
                     id="title"
-                    type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="팀장"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="">선택</option>
+                    <option value="담당">담당</option>
+                    <option value="매니저">매니저</option>
+                    <option value="책임">책임</option>
+                    <option value="실장">실장</option>
+                    <option value="이사">이사</option>
+                    <option value="상무">상무</option>
+                    <option value="대표이사">대표이사</option>
+                  </select>
                   />
                 </div>
               </div>

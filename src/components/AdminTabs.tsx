@@ -1000,33 +1000,37 @@ export default function AdminTabs({
                     <td className="px-4 py-3 text-center">
                       {editingId === p.id ? (
                         <div className="space-y-1.5">
-                          <input
-                            type="text"
+                          <select
                             value={editFields.team}
                             onChange={(e) =>
                               setEditFields((f) => ({ ...f, team: e.target.value }))
                             }
-                            placeholder="팀"
                             className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-                          />
-                          <input
-                            type="text"
+                          >
+                            <option value="">팀 선택</option>
+                            <option value="MD">MD</option>
+                            <option value="마케팅">마케팅</option>
+                            <option value="경영지원">경영지원</option>
+                            <option value="기획/전략">기획/전략</option>
+                            <option value="콘텐츠">콘텐츠</option>
+                            <option value="디자인">디자인</option>
+                          </select>
+                          <select
                             value={editFields.title}
                             onChange={(e) =>
                               setEditFields((f) => ({ ...f, title: e.target.value }))
                             }
-                            placeholder="직책"
                             className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-                          />
-                          <input
-                            type="text"
-                            value={editFields.position}
-                            onChange={(e) =>
-                              setEditFields((f) => ({ ...f, position: e.target.value }))
-                            }
-                            placeholder="포지션"
-                            className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-                          />
+                          >
+                            <option value="">직책 선택</option>
+                            <option value="담당">담당</option>
+                            <option value="매니저">매니저</option>
+                            <option value="책임">책임</option>
+                            <option value="실장">실장</option>
+                            <option value="이사">이사</option>
+                            <option value="상무">상무</option>
+                            <option value="대표이사">대표이사</option>
+                          </select>
                         </div>
                       ) : (
                         <div className="text-xs">
