@@ -5,6 +5,7 @@ import AttendanceButtons from "@/components/AttendanceButtons";
 import WeeklyRecords from "@/components/WeeklyRecords";
 import LogoutButton from "@/components/LogoutButton";
 import ConsentModal from "@/components/ConsentModal";
+import ProfileCompleteModal from "@/components/ProfileCompleteModal";
 import WorkingHoursSummary from "@/components/WorkingHoursSummary";
 import LeaveSection from "@/components/LeaveSection";
 
@@ -19,7 +20,7 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, location_consent")
+    .select("role, location_consent, name, team, title")
     .eq("id", user.id)
     .single();
 
@@ -57,10 +58,12 @@ export default async function DashboardPage() {
     .limit(10);
 
   const needsConsent = !profile?.location_consent;
+  const needsProfile = !profile?.name;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {needsConsent && <ConsentModal userId={user.id} />}
+      {needsProfile && <ProfileCompleteModal userId={user.id} />}
+      {!needsProfile && needsConsent && <ConsentModal userId={user.id} />}
 
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">

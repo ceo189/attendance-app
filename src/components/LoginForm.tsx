@@ -9,6 +9,8 @@ type Mode = "login" | "signup" | "reset";
 export default function LoginForm() {
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
+  const [team, setTeam] = useState("");
+  const [title, setTitle] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -23,6 +25,8 @@ export default function LoginForm() {
     setSuccess("");
     setPassword("");
     setName("");
+    setTeam("");
+    setTitle("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -53,7 +57,7 @@ export default function LoginForm() {
           email,
           password,
           options: {
-            data: { full_name: name.trim() },
+            data: { full_name: name.trim(), team: team.trim(), title: title.trim() },
           },
         });
         if (signUpError) {
@@ -116,24 +120,60 @@ export default function LoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === "signup" && (
-            <div>
-              <label
-                htmlFor="name"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                이름
-              </label>
-              <input
-                id="name"
-                type="text"
-                autoComplete="name"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="홍길동"
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
+            <>
+              <div>
+                <label
+                  htmlFor="name"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  이름
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  autoComplete="name"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="홍길동"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label
+                    htmlFor="team"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    팀 <span className="font-normal text-gray-400">(선택)</span>
+                  </label>
+                  <input
+                    id="team"
+                    type="text"
+                    value={team}
+                    onChange={(e) => setTeam(e.target.value)}
+                    placeholder="개발팀"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label
+                    htmlFor="title"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    직책 <span className="font-normal text-gray-400">(선택)</span>
+                  </label>
+                  <input
+                    id="title"
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="팀장"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+            </>
           )}
 
           <div>

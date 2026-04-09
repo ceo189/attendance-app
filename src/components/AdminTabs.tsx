@@ -154,6 +154,15 @@ export default function AdminTabs({
     message: string;
   } | null>(null);
 
+  // Inline edit state for roles tab
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFields, setEditFields] = useState<{
+    name: string;
+    team: string;
+    title: string;
+    position: string;
+  }>({ name: "", team: "", title: "", position: "" });
+
   // Date picker state — defaults to today
   const [selectedDate, setSelectedDate] = useState<string>(todayDateString);
   const [dateAttendance, setDateAttendance] = useState<AttendanceItem[]>(attendanceList);
@@ -353,6 +362,54 @@ export default function AdminTabs({
         "success",
         `권한이 ${ROLE_LABELS[newRole]}(으)로 변경되었습니다.`
       );
+    }
+    setLoading(null);
+  }
+
+  function startEdit(p: ProfileItem) {
+    setEditingId(p.id);
+    setEditFields({
+      name: p.name ?? "",
+      team: p.team ?? "",
+      title: p.title ?? "",
+      position: p.position ?? "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(profileId: string) {
+    setLoading(`edit-${profileId}`);
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        name: editFields.name.trim(),
+        team: editFields.team.trim(),
+        title: editFields.title.trim(),
+        position: editFields.position.trim(),
+      })
+      .eq("id", profileId);
+
+    if (error) {
+      showToast("error", `정보 저장 실패: ${error.message}`);
+    } else {
+      setProfiles((prev) =>
+        prev.map((p) =>
+          p.id === profileId
+            ? {
+                ...p,
+                name: editFields.name.trim(),
+                team: editFields.team.trim(),
+                title: editFields.title.trim(),
+                position: editFields.position.trim(),
+              }
+            : p
+        )
+      );
+      setEditingId(null);
+      showToast("success", "정보가 저장되었습니다.");
     }
     setLoading(null);
   }
@@ -904,6 +961,9 @@ export default function AdminTabs({
                     직원
                   </th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600">
+                    팀 / 직책
+                  </th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">
                     현재 권한
                   </th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600">
@@ -915,10 +975,72 @@ export default function AdminTabs({
                 {profiles.map((p) => (
                   <tr key={p.id}>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">
-                        {p.name || p.email.split("@")[0]}
-                      </div>
-                      <div className="text-xs text-gray-400">{p.email}</div>
+                      {editingId === p.id ? (
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={editFields.name}
+                            onChange={(e) =>
+                              setEditFields((f) => ({ ...f, name: e.target.value }))
+                            }
+                            placeholder="이름"
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                          />
+                          <div className="text-xs text-gray-400">{p.email}</div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="font-medium text-gray-900">
+                            {p.name || p.email.split("@")[0]}
+                          </div>
+                          <div className="text-xs text-gray-400">{p.email}</div>
+                        </>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {editingId === p.id ? (
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={editFields.team}
+                            onChange={(e) =>
+                              setEditFields((f) => ({ ...f, team: e.target.value }))
+                            }
+                            placeholder="팀"
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={editFields.title}
+                            onChange={(e) =>
+                              setEditFields((f) => ({ ...f, title: e.target.value }))
+                            }
+                            placeholder="직책"
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={editFields.position}
+                            onChange={(e) =>
+                              setEditFields((f) => ({ ...f, position: e.target.value }))
+                            }
+                            placeholder="포지션"
+                            className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-xs">
+                          {p.team && <div className="font-medium text-gray-700">{p.team}</div>}
+                          {(p.title || p.position) && (
+                            <div className="text-gray-500">
+                              {[p.title, p.position].filter(Boolean).join(" / ")}
+                            </div>
+                          )}
+                          {!p.team && !p.title && !p.position && (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span
@@ -928,12 +1050,40 @@ export default function AdminTabs({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {p.role === "master" ? (
-                        <span className="text-xs text-gray-400">
-                          변경 불가
-                        </span>
+                      {editingId === p.id ? (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <button
+                            onClick={() => saveEdit(p.id)}
+                            disabled={loading === `edit-${p.id}`}
+                            className="w-full rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {loading === `edit-${p.id}` ? "..." : "저장"}
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      ) : p.role === "master" ? (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <button
+                            onClick={() => startEdit(p)}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
+                          >
+                            정보 수정
+                          </button>
+                          <span className="text-xs text-gray-400">권한 변경 불가</span>
+                        </div>
                       ) : (
                         <div className="flex flex-col items-center gap-1.5">
+                          <button
+                            onClick={() => startEdit(p)}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
+                          >
+                            정보 수정
+                          </button>
                           <button
                             onClick={() => handleRoleChange(p.id, p.role)}
                             disabled={loading === p.id}
@@ -950,15 +1100,11 @@ export default function AdminTabs({
                                 : "관리자로 승격"}
                           </button>
                           <button
-                            onClick={() =>
-                              handleResetPassword(p.id, p.email)
-                            }
+                            onClick={() => handleResetPassword(p.id, p.email)}
                             disabled={loading === `reset-${p.id}`}
                             className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
                           >
-                            {loading === `reset-${p.id}`
-                              ? "..."
-                              : "비밀번호 초기화"}
+                            {loading === `reset-${p.id}` ? "..." : "비밀번호 초기화"}
                           </button>
                         </div>
                       )}
