@@ -70,8 +70,7 @@ export default function LoginForm() {
           switchMode("login");
           setEmail(email);
         } else {
-          router.push("/dashboard");
-          router.refresh();
+          window.location.href = "/dashboard";
           return;
         }
       } else {
@@ -88,8 +87,7 @@ export default function LoginForm() {
             setError(error.message);
           }
         } else {
-          router.push("/dashboard");
-          router.refresh();
+          window.location.href = "/dashboard";
           return;
         }
       }
