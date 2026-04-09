@@ -123,10 +123,8 @@ export default function AttendanceButtons({
           const gps = await getGPS();
           lat = gps.lat;
           lng = gps.lng;
-        } catch (gpsErr) {
-          showToast("error", (gpsErr as Error).message);
-          setLoading(false);
-          return;
+        } catch {
+          // GPS 실패해도 출퇴근 기록은 진행
         }
       }
 
@@ -178,10 +176,8 @@ export default function AttendanceButtons({
           const gps = await getGPS();
           lat = gps.lat;
           lng = gps.lng;
-        } catch (gpsErr) {
-          showToast("error", (gpsErr as Error).message);
-          setLoading(false);
-          return;
+        } catch {
+          // GPS 실패해도 출퇴근 기록은 진행
         }
       }
 
