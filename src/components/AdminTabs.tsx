@@ -80,7 +80,11 @@ interface AttendanceItem {
 interface ProfileItem {
   id: string;
   email: string;
+  name: string;
   role: string;
+  position: string;
+  title: string;
+  team: string;
 }
 
 export interface LeaveRequestItem {
@@ -393,10 +397,10 @@ export default function AdminTabs({
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">
-                    이메일
+                    이름
                   </th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600">
-                    역할
+                    팀 / 직책
                   </th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600">
                     출근
@@ -435,13 +439,31 @@ export default function AdminTabs({
 
                   return (
                     <tr key={p.id}>
-                      <td className="px-4 py-3 text-gray-900">{p.email}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">
+                          {p.name || p.email.split("@")[0]}
+                        </div>
+                        <div className="text-xs text-gray-400">{p.email}</div>
+                      </td>
                       <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[p.role] ?? ROLE_COLORS.employee}`}
-                        >
-                          {ROLE_LABELS[p.role] ?? p.role}
-                        </span>
+                        {(p.team || p.title || p.position) ? (
+                          <div>
+                            {p.team && (
+                              <div className="text-xs font-medium text-gray-700">{p.team}</div>
+                            )}
+                            {(p.title || p.position) && (
+                              <div className="text-xs text-gray-500">
+                                {[p.title, p.position].filter(Boolean).join(" / ")}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[p.role] ?? ROLE_COLORS.employee}`}
+                          >
+                            {ROLE_LABELS[p.role] ?? p.role}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <div className="text-gray-700">
@@ -621,7 +643,7 @@ export default function AdminTabs({
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">
-                    이메일
+                    직원
                   </th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600">
                     현재 권한
@@ -634,7 +656,12 @@ export default function AdminTabs({
               <tbody className="divide-y divide-gray-100">
                 {profiles.map((p) => (
                   <tr key={p.id}>
-                    <td className="px-4 py-3 text-gray-900">{p.email}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900">
+                        {p.name || p.email.split("@")[0]}
+                      </div>
+                      <div className="text-xs text-gray-400">{p.email}</div>
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[p.role] ?? ROLE_COLORS.employee}`}

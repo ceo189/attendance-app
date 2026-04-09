@@ -35,7 +35,7 @@ export default async function AdminPage() {
 
   const { data: allProfiles } = await supabase
     .from("profiles")
-    .select("id, email, role")
+    .select("id, email, name, role, position, title, team")
     .order("email");
 
   // Fetch all leave requests with user emails
@@ -72,7 +72,11 @@ export default async function AdminPage() {
   const profilesList = (allProfiles ?? []).map((p) => ({
     id: p.id,
     email: p.email,
+    name: p.name ?? "",
     role: p.role,
+    position: p.position ?? "",
+    title: p.title ?? "",
+    team: p.team ?? "",
   }));
 
   const leaveRequests = (leaveRecords ?? []).map((r) => ({
