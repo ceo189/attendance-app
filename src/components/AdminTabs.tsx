@@ -150,6 +150,31 @@ export default function AdminTabs({
   // Build attendance lookup by email
   const attendanceMap = new Map(attendanceList.map((a) => [a.email, a]));
 
+  async function handleResetPassword(profileId: string, profileEmail: string) {
+    const tempPw = `Grovit${Math.floor(1000 + Math.random() * 9000)}!`;
+    if (
+      !window.confirm(
+        `${profileEmail}의 비밀번호를 초기화하시겠습니까?\n\n임시 비밀번호: ${tempPw}`
+      )
+    )
+      return;
+
+    setLoading(`reset-${profileId}`);
+    const res = await fetch("/api/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: profileId, tempPassword: tempPw }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      showToast("error", `비밀번호 초기화 실패: ${data.error}`);
+    } else {
+      showToast("success", `임시 비밀번호: ${tempPw} (직원에게 전달해주세요)`);
+    }
+    setLoading(null);
+  }
+
   async function handleRoleChange(profileId: string, currentRole: string) {
     const newRole = currentRole === "admin" ? "employee" : "admin";
     setLoading(profileId);
@@ -675,21 +700,34 @@ export default function AdminTabs({
                           변경 불가
                         </span>
                       ) : (
-                        <button
-                          onClick={() => handleRoleChange(p.id, p.role)}
-                          disabled={loading === p.id}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-medium text-white transition ${
-                            p.role === "admin"
-                              ? "bg-blue-500 hover:bg-blue-600"
-                              : "bg-purple-500 hover:bg-purple-600"
-                          } disabled:opacity-50`}
-                        >
-                          {loading === p.id
-                            ? "..."
-                            : p.role === "admin"
-                              ? "직원으로 변경"
-                              : "관리자로 승격"}
-                        </button>
+                        <div className="flex flex-col items-center gap-1.5">
+                          <button
+                            onClick={() => handleRoleChange(p.id, p.role)}
+                            disabled={loading === p.id}
+                            className={`w-full rounded-lg px-3 py-1.5 text-xs font-medium text-white transition ${
+                              p.role === "admin"
+                                ? "bg-blue-500 hover:bg-blue-600"
+                                : "bg-purple-500 hover:bg-purple-600"
+                            } disabled:opacity-50`}
+                          >
+                            {loading === p.id
+                              ? "..."
+                              : p.role === "admin"
+                                ? "직원으로 변경"
+                                : "관리자로 승격"}
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleResetPassword(p.id, p.email)
+                            }
+                            disabled={loading === `reset-${p.id}`}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
+                          >
+                            {loading === `reset-${p.id}`
+                              ? "..."
+                              : "비밀번호 초기화"}
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
