@@ -171,6 +171,64 @@ export default function AdminTabs({
     position: string;
   }>({ name: "", team: "", title: "", position: "" });
 
+  // Attendance edit state (master only)
+  const [editAttId, setEditAttId] = useState<string | null>(null);
+  const [editAttFields, setEditAttFields] = useState({ clock_in: "", clock_out: "" });
+
+  function startAttEdit(att: AttendanceItem) {
+    setEditAttId(att.id);
+    setEditAttFields({
+      clock_in: att.clock_in ? new Date(att.clock_in).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" }) : "",
+      clock_out: att.clock_out ? new Date(att.clock_out).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" }) : "",
+    });
+  }
+
+  async function saveAttEdit(attId: string) {
+    setLoading(`att-${attId}`);
+    const date = selectedDate;
+    const toISO = (timeStr: string) => {
+      if (!timeStr) return null;
+      const [h, m] = timeStr.split(":").map(Number);
+      const d = new Date(`${date}T00:00:00+09:00`);
+      d.setHours(h, m, 0, 0);
+      return d.toISOString();
+    };
+    const { error } = await supabase
+      .from("attendance")
+      .update({
+        clock_in: toISO(editAttFields.clock_in),
+        clock_out: toISO(editAttFields.clock_out) || null,
+        updated_by: (await supabase.auth.getUser()).data.user?.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", attId);
+    if (error) {
+      showToast("error", `수정 실패: ${error.message}`);
+    } else {
+      showToast("success", "출퇴근 기록이 수정되었습니다.");
+      setEditAttId(null);
+      // Refresh data
+      setDateLoading(true);
+      const { data } = await supabase
+        .from("attendance")
+        .select("id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles(email)")
+        .eq("date", selectedDate)
+        .order("clock_in", { ascending: true });
+      if (data) {
+        setDateAttendance(data.map((r: Record<string, unknown>) => ({
+          id: r.id as string, user_id: r.user_id as string,
+          email: (r.profiles as unknown as { email: string })?.email ?? "",
+          clock_in: r.clock_in as string | null, clock_out: r.clock_out as string | null,
+          clock_in_location: r.clock_in_location as string | null, clock_out_location: r.clock_out_location as string | null,
+          updated_by: r.updated_by as string | null, updated_at: r.updated_at as string | null,
+          latitude: r.latitude as number | null, longitude: r.longitude as number | null,
+        })));
+      }
+      setDateLoading(false);
+    }
+    setLoading(null);
+  }
+
   // Date picker state — defaults to today
   const [selectedDate, setSelectedDate] = useState<string>(todayDateString);
   const [dateAttendance, setDateAttendance] = useState<AttendanceItem[]>(attendanceList);
@@ -720,6 +778,11 @@ export default function AdminTabs({
                       수정 이력
                     </th>
                   )}
+                  {isMaster && (
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">
+                      관리
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -820,6 +883,58 @@ export default function AdminTabs({
                             </div>
                           ) : (
                             "-"
+                          )}
+                        </td>
+                      )}
+                      {isMaster && (
+                        <td className="px-4 py-3 text-center">
+                          {att ? (
+                            editAttId === att.id ? (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">출근</span>
+                                  <input
+                                    type="time"
+                                    value={editAttFields.clock_in}
+                                    onChange={(e) => setEditAttFields((f) => ({ ...f, clock_in: e.target.value }))}
+                                    className="rounded border border-gray-300 px-1 py-0.5 text-xs focus:border-blue-500 focus:outline-none"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">퇴근</span>
+                                  <input
+                                    type="time"
+                                    value={editAttFields.clock_out}
+                                    onChange={(e) => setEditAttFields((f) => ({ ...f, clock_out: e.target.value }))}
+                                    className="rounded border border-gray-300 px-1 py-0.5 text-xs focus:border-blue-500 focus:outline-none"
+                                  />
+                                </div>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => saveAttEdit(att.id)}
+                                    disabled={loading === `att-${att.id}`}
+                                    className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                                  >
+                                    {loading === `att-${att.id}` ? "..." : "저장"}
+                                  </button>
+                                  <button
+                                    onClick={() => setEditAttId(null)}
+                                    className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                                  >
+                                    취소
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => startAttEdit(att)}
+                                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              >
+                                수정
+                              </button>
+                            )
+                          ) : (
+                            <span className="text-xs text-gray-300">-</span>
                           )}
                         </td>
                       )}
