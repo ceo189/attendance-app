@@ -28,7 +28,7 @@ export default async function AdminPage() {
   const { data: records } = await supabase
     .from("attendance")
     .select(
-      "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles(email)"
+      "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles!attendance_user_id_fkey(email)"
     )
     .eq("date", today)
     .order("clock_in", { ascending: true });

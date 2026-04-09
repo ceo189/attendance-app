@@ -211,7 +211,7 @@ export default function AdminTabs({
       setDateLoading(true);
       const { data } = await supabase
         .from("attendance")
-        .select("id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles(email)")
+        .select("id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles!attendance_user_id_fkey(email)")
         .eq("date", selectedDate)
         .order("clock_in", { ascending: true });
       if (data) {
@@ -250,7 +250,7 @@ export default function AdminTabs({
       const { data } = await supabase
         .from("attendance")
         .select(
-          "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles(email)"
+          "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles!attendance_user_id_fkey(email)"
         )
         .eq("date", date)
         .order("clock_in", { ascending: true });
@@ -302,7 +302,7 @@ export default function AdminTabs({
       const { data } = await supabase
         .from("attendance")
         .select(
-          "user_id, clock_in, clock_out, profiles(email)"
+          "user_id, clock_in, clock_out, profiles!attendance_user_id_fkey(email)"
         )
         .gte("date", startDate)
         .lte("date", endDate)
@@ -557,7 +557,7 @@ export default function AdminTabs({
       supabase
         .from("attendance")
         .select(
-          "user_id, date, clock_in, clock_out, clock_in_location, clock_out_location, profiles(email)"
+          "user_id, date, clock_in, clock_out, clock_in_location, clock_out_location, profiles!attendance_user_id_fkey(email)"
         )
         .gte("date", startDate)
         .lte("date", endDate)
