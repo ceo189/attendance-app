@@ -831,8 +831,8 @@ export default function AdminTabs({
           </div>
           )}
 
-          {/* Monthly Stats Toggle */}
-          <div className="mt-8">
+          {/* Monthly Stats Toggle (master only) */}
+          {isMaster && <div className="mt-8">
             <button
               onClick={() => setShowMonthlyStats((v) => !v)}
               className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
@@ -890,7 +890,7 @@ export default function AdminTabs({
                 )}
               </div>
             )}
-          </div>
+          </div>}
         </div>
       )}
 
