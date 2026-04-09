@@ -4,16 +4,26 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+type Mode = "login" | "signup" | "reset";
+
 export default function LoginForm() {
+  const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  function switchMode(newMode: Mode) {
+    setMode(newMode);
+    setError("");
+    setSuccess("");
+    setPassword("");
+    setName("");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,7 +32,18 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      if (isSignUp) {
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/reset`,
+        });
+        if (error) {
+          setError(error.message);
+        } else {
+          setSuccess(
+            "비밀번호 재설정 링크를 이메일로 보냈습니다. 메일함을 확인해주세요."
+          );
+        }
+      } else if (mode === "signup") {
         if (!name.trim()) {
           setError("이름을 입력해주세요.");
           setLoading(false);
@@ -40,16 +61,14 @@ export default function LoginForm() {
           setLoading(false);
           return;
         }
-        // Auto-login after signup
         const { error: loginError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (loginError) {
           setSuccess("가입 완료! 로그인해주세요.");
-          setIsSignUp(false);
-          setName("");
-          setPassword("");
+          switchMode("login");
+          setEmail(email);
         } else {
           router.push("/dashboard");
           router.refresh();
@@ -81,6 +100,12 @@ export default function LoginForm() {
     setLoading(false);
   }
 
+  const titles: Record<Mode, string> = {
+    login: "회사 이메일로 로그인하세요",
+    signup: "회사 이메일로 가입하세요",
+    reset: "비밀번호 재설정",
+  };
+
   return (
     <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 pb-8">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg sm:p-8">
@@ -88,11 +113,11 @@ export default function LoginForm() {
           근태관리 시스템
         </h1>
         <p className="mb-6 text-center text-sm text-gray-500 sm:mb-8">
-          {isSignUp ? "회사 이메일로 가입하세요" : "회사 이메일로 로그인하세요"}
+          {titles[mode]}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {isSignUp && (
+          {mode === "signup" && (
             <div>
               <label
                 htmlFor="name"
@@ -136,27 +161,31 @@ export default function LoginForm() {
             />
           </div>
 
-          <div>
-            <label
-              htmlFor="password"
-              className="mb-1 block text-sm font-medium text-gray-700"
-            >
-              비밀번호
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete={isSignUp ? "new-password" : "current-password"}
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="6자 이상"
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
+          {mode !== "reset" && (
+            <div>
+              <label
+                htmlFor="password"
+                className="mb-1 block text-sm font-medium text-gray-700"
+              >
+                비밀번호
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete={
+                  mode === "signup" ? "new-password" : "current-password"
+                }
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="6자 이상"
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+          )}
 
-          {isSignUp && (
+          {mode === "signup" && (
             <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-600">
               가입 시 아래 사항에 동의하게 됩니다:
               <ul className="mt-1 ml-3 list-disc space-y-0.5">
@@ -189,22 +218,50 @@ export default function LoginForm() {
             disabled={loading}
             className="w-full rounded-lg bg-blue-600 py-3.5 text-base font-semibold text-white transition active:scale-[0.98] hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "처리 중..." : isSignUp ? "가입하기" : "로그인"}
+            {loading
+              ? "처리 중..."
+              : mode === "signup"
+                ? "가입하기"
+                : mode === "reset"
+                  ? "재설정 링크 보내기"
+                  : "로그인"}
           </button>
         </form>
 
-        <button
-          onClick={() => {
-            setIsSignUp(!isSignUp);
-            setError("");
-            setSuccess("");
-          }}
-          className="mt-4 w-full py-2 text-center text-sm text-blue-600 hover:underline"
-        >
-          {isSignUp
-            ? "이미 계정이 있으신가요? 로그인"
-            : "계정이 없으신가요? 가입하기"}
-        </button>
+        <div className="mt-4 space-y-2 text-center text-sm">
+          {mode === "login" && (
+            <>
+              <button
+                onClick={() => switchMode("reset")}
+                className="w-full py-1 text-gray-500 hover:underline"
+              >
+                비밀번호를 잊으셨나요?
+              </button>
+              <button
+                onClick={() => switchMode("signup")}
+                className="w-full py-1 text-blue-600 hover:underline"
+              >
+                계정이 없으신가요? 가입하기
+              </button>
+            </>
+          )}
+          {mode === "signup" && (
+            <button
+              onClick={() => switchMode("login")}
+              className="w-full py-1 text-blue-600 hover:underline"
+            >
+              이미 계정이 있으신가요? 로그인
+            </button>
+          )}
+          {mode === "reset" && (
+            <button
+              onClick={() => switchMode("login")}
+              className="w-full py-1 text-blue-600 hover:underline"
+            >
+              로그인으로 돌아가기
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
