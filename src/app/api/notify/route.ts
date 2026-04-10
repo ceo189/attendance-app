@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const { type, email, time, location } = await req.json();
+  const { type, email, name, team, title, time, location } = await req.json();
 
-  const messageText = buildMessage(type, email, time, location);
+  const messageText = buildMessage(type, { email, name, team, title }, time, location);
 
   const results = await Promise.allSettled([
     sendSlack(messageText),
@@ -21,31 +21,52 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
+const LOCATION_LABELS: Record<string, string> = {
+  office: "사무실",
+  outside: "외부",
+  remote: "재택",
+};
+
+function buildProfile(profile: {
+  email: string;
+  name?: string;
+  team?: string;
+  title?: string;
+}): string {
+  const displayName = profile.name || profile.email.split("@")[0];
+  const parts = [profile.team, profile.title].filter(Boolean);
+  if (parts.length > 0) {
+    return `${displayName} (${parts.join(" / ")})`;
+  }
+  return displayName;
+}
+
 function buildMessage(
   type: string,
-  email: string,
+  profile: { email: string; name?: string; team?: string; title?: string },
   time: string,
   location?: string
 ): string {
-  const timeStr = new Date(time).toLocaleString("ko-KR", {
+  const timeStr = new Date(time).toLocaleTimeString("ko-KR", {
     timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   });
 
+  const who = buildProfile(profile);
+  const loc = LOCATION_LABELS[location ?? ""] || location || "";
+
   switch (type) {
     case "clock_in":
-      return `[근태] 출근 - ${email}\n시간: ${timeStr}${location ? `\n장소: ${location}` : ""}`;
+      return `🟢 출근  |  ${who}\n⏰ ${timeStr}${loc ? `  📍 ${loc}` : ""}`;
     case "clock_out":
-      return `[근태] 퇴근 - ${email}\n시간: ${timeStr}${location ? `\n장소: ${location}` : ""}`;
+      return `🔴 퇴근  |  ${who}\n⏰ ${timeStr}${loc ? `  📍 ${loc}` : ""}`;
     case "leave_request":
-      return `[휴가] 휴가 신청 - ${email}\n${location ?? ""}\n시간: ${timeStr}`;
+      return `🏖️ 휴가 신청  |  ${who}\n${location ?? ""}`;
     default:
-      return `[근태] ${type} - ${email}\n시간: ${timeStr}`;
+      return `📋 ${type}  |  ${who}\n⏰ ${timeStr}`;
   }
 }
 

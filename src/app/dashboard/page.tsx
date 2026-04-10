@@ -95,6 +95,9 @@ export default async function DashboardPage() {
             <AttendanceButtons
               userId={user.id}
               userEmail={user.email ?? ""}
+              userName={profile?.name ?? ""}
+              userTeam={profile?.team ?? ""}
+              userTitle={profile?.title ?? ""}
               recordId={todayRecord?.id ?? null}
               initialClockIn={todayRecord?.clock_in ?? null}
               initialClockOut={todayRecord?.clock_out ?? null}

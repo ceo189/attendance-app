@@ -45,7 +45,7 @@ function getGPS(): Promise<{ lat: number; lng: number }> {
 
 async function sendNotify(
   type: "clock_in" | "clock_out",
-  email: string,
+  profile: { email: string; name?: string; team?: string; title?: string },
   time: string,
   location: string
 ) {
@@ -53,7 +53,7 @@ async function sendNotify(
     await fetch("/api/notify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, email, time, location }),
+      body: JSON.stringify({ type, ...profile, time, location }),
     });
   } catch {
     // Non-fatal
@@ -63,6 +63,9 @@ async function sendNotify(
 interface Props {
   userId: string;
   userEmail: string;
+  userName: string;
+  userTeam: string;
+  userTitle: string;
   recordId: string | null;
   initialClockIn: string | null;
   initialClockOut: string | null;
@@ -74,6 +77,9 @@ interface Props {
 export default function AttendanceButtons({
   userId,
   userEmail,
+  userName,
+  userTeam,
+  userTitle,
   recordId,
   initialClockIn,
   initialClockOut,
@@ -149,7 +155,7 @@ export default function AttendanceButtons({
         setCurrentRecordId(data.id);
         setSelectedLocation("");
         showToast("success", "출근 기록 완료!");
-        sendNotify("clock_in", userEmail, now, selectedLocation);
+        sendNotify("clock_in", { email: userEmail, name: userName, team: userTeam, title: userTitle }, now, selectedLocation);
       }
     } catch (err) {
       showToast("error", `네트워크 오류: ${String(err)}`);
@@ -197,7 +203,7 @@ export default function AttendanceButtons({
         setClockOut(now);
         setClockOutLocation(selectedLocation);
         showToast("success", "퇴근 기록 완료!");
-        sendNotify("clock_out", userEmail, now, selectedLocation);
+        sendNotify("clock_out", { email: userEmail, name: userName, team: userTeam, title: userTitle }, now, selectedLocation);
       }
     } catch (err) {
       showToast("error", `네트워크 오류: ${String(err)}`);
