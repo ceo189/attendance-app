@@ -289,21 +289,10 @@ export default function AdminTabs({
     [supabase, isMaster]
   );
 
-  // When selectedDate changes (and it's not the initial today), refetch
+  // Fetch attendance whenever date changes
   useEffect(() => {
-    const today = todayDateString();
-    if (selectedDate !== today) {
-      fetchDateAttendance(selectedDate);
-    }
-    // For today we already have the server-side data
-  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Reset to server data when switching back to today
-  useEffect(() => {
-    if (selectedDate === todayDateString()) {
-      setDateAttendance(attendanceList);
-    }
-  }, [selectedDate, attendanceList]);
+    fetchDateAttendance(selectedDate);
+  }, [selectedDate, fetchDateAttendance]);
 
   // Fetch and compute monthly stats
   const fetchMonthlyStats = useCallback(
