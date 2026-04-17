@@ -99,6 +99,9 @@ export default function AttendanceButtons({
   const [currentRecordId, setCurrentRecordId] = useState<string | null>(
     recordId
   );
+  const [sessionCount, setSessionCount] = useState<number>(
+    initialClockIn ? 1 : 0
+  );
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{
     type: "success" | "error";
@@ -211,6 +214,16 @@ export default function AttendanceButtons({
     setLoading(false);
   }
 
+  function handleReClockIn() {
+    setClockIn(null);
+    setClockOut(null);
+    setClockInLocation("");
+    setClockOutLocation("");
+    setSelectedLocation("");
+    setCurrentRecordId(null);
+    setSessionCount((n) => n + 1);
+  }
+
   function formatTime(iso: string | null) {
     if (!iso) return "--:--";
     return new Date(iso).toLocaleTimeString("ko-KR", {
@@ -222,6 +235,7 @@ export default function AttendanceButtons({
   }
 
   const showDropdown = !clockOut;
+  const sessionDone = !!clockIn && !!clockOut;
 
   return (
     <div className="space-y-6">
@@ -236,6 +250,12 @@ export default function AttendanceButtons({
           {toast.type === "success" ? "\u{1F7E2}" : "\u{1F534}"}{" "}
           {toast.message}
         </div>
+      )}
+
+      {sessionCount > 1 && (
+        <p className="text-center text-xs text-gray-400">
+          오늘 {sessionCount}번째 세션
+        </p>
       )}
 
       <div className="flex justify-center gap-8 text-center">
@@ -294,6 +314,17 @@ export default function AttendanceButtons({
               : "퇴근하기"}
         </button>
       </div>
+
+      {sessionDone && (
+        <div className="flex justify-center">
+          <button
+            onClick={handleReClockIn}
+            className="rounded-xl border border-blue-300 bg-blue-50 px-6 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 active:scale-95"
+          >
+            재출근
+          </button>
+        </div>
+      )}
     </div>
   );
 }

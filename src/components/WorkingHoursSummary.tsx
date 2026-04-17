@@ -1,4 +1,5 @@
 interface AttendanceRecord {
+  date: string;
   clock_in: string | null;
   clock_out: string | null;
 }
@@ -7,13 +8,12 @@ interface Props {
   records: AttendanceRecord[];
 }
 
-function calcWorkedMinutes(clock_in: string | null, clock_out: string | null): number {
+function calcWorkedMinutesRaw(clock_in: string | null, clock_out: string | null): number {
   if (!clock_in || !clock_out) return 0;
-  const inMs = new Date(clock_in).getTime();
-  const outMs = new Date(clock_out).getTime();
-  const diffMinutes = Math.floor((outMs - inMs) / 60000);
-  // Subtract 1 hour (60 min) lunch break
-  return Math.max(0, diffMinutes - 60);
+  return Math.max(
+    0,
+    Math.floor((new Date(clock_out).getTime() - new Date(clock_in).getTime()) / 60000)
+  );
 }
 
 function formatHoursMinutes(totalMinutes: number): string {
@@ -25,12 +25,27 @@ function formatHoursMinutes(totalMinutes: number): string {
 }
 
 export default function WorkingHoursSummary({ records }: Props) {
-  const totalMinutes = records.reduce(
-    (acc, r) => acc + calcWorkedMinutes(r.clock_in, r.clock_out),
-    0
-  );
+  // Group by date to deduct lunch once per day
+  const byDate = new Map<string, AttendanceRecord[]>();
+  for (const r of records) {
+    if (!byDate.has(r.date)) byDate.set(r.date, []);
+    byDate.get(r.date)!.push(r);
+  }
 
-  const daysWorked = records.filter((r) => r.clock_in && r.clock_out).length;
+  let totalMinutes = 0;
+  let daysWorked = 0;
+
+  for (const [, sessions] of byDate) {
+    const completedSessions = sessions.filter((s) => s.clock_in && s.clock_out);
+    if (completedSessions.length === 0) continue;
+    daysWorked += 1;
+    const dayRaw = completedSessions.reduce(
+      (acc, s) => acc + calcWorkedMinutesRaw(s.clock_in, s.clock_out),
+      0
+    );
+    // Deduct 1 lunch hour once per day
+    totalMinutes += Math.max(0, dayRaw - 60);
+  }
 
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm">

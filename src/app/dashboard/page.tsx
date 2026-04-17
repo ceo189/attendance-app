@@ -28,12 +28,14 @@ export default async function DashboardPage() {
   const today = new Date().toLocaleDateString("sv-SE", {
     timeZone: "Asia/Seoul",
   });
-  const { data: todayRecord } = await supabase
+  const { data: todayRecords } = await supabase
     .from("attendance")
     .select("id, clock_in, clock_out, clock_in_location, clock_out_location")
     .eq("user_id", user.id)
     .eq("date", today)
-    .single();
+    .order("clock_in", { ascending: false });
+
+  const todayRecord = todayRecords?.[0] ?? null;
 
   const now = new Date(
     new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" })

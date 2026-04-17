@@ -31,15 +31,18 @@ function formatDate(dateStr: string) {
   });
 }
 
-function calcWorkedHours(clock_in: string | null, clock_out: string | null): string {
-  if (!clock_in || !clock_out) return "-";
-  const diffMinutes = Math.floor(
-    (new Date(clock_out).getTime() - new Date(clock_in).getTime()) / 60000
+function calcWorkedMinutes(clock_in: string | null, clock_out: string | null): number {
+  if (!clock_in || !clock_out) return 0;
+  return Math.max(
+    0,
+    Math.floor((new Date(clock_out).getTime() - new Date(clock_in).getTime()) / 60000)
   );
-  const worked = Math.max(0, diffMinutes - 60);
-  if (worked === 0) return "0h";
-  const h = Math.floor(worked / 60);
-  const m = worked % 60;
+}
+
+function formatDuration(totalMinutes: number): string {
+  if (totalMinutes === 0) return "-";
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
@@ -65,6 +68,17 @@ export default function WeeklyRecords({
     );
   }
 
+  // Group records by date, preserving descending date order
+  const dateOrder: string[] = [];
+  const byDate = new Map<string, AttendanceRecord[]>();
+  for (const r of records) {
+    if (!byDate.has(r.date)) {
+      dateOrder.push(r.date);
+      byDate.set(r.date, []);
+    }
+    byDate.get(r.date)!.push(r);
+  }
+
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200">
       <table className="w-full text-sm">
@@ -85,24 +99,57 @@ export default function WeeklyRecords({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {records.map((r) => (
-            <tr key={r.date}>
-              <td className="px-3 py-3 text-gray-900">{formatDate(r.date)}</td>
-              <td className="px-3 py-3 text-center">
-                <div className="text-gray-700">{formatTime(r.clock_in)}</div>
-                <LocationBadge value={r.clock_in_location} />
-              </td>
-              <td className="px-3 py-3 text-center">
-                <div className="text-gray-700">{formatTime(r.clock_out)}</div>
-                <LocationBadge value={r.clock_out_location} />
-              </td>
-              <td className="px-3 py-3 text-center">
-                <span className="font-medium text-gray-700">
-                  {calcWorkedHours(r.clock_in, r.clock_out)}
-                </span>
-              </td>
-            </tr>
-          ))}
+          {dateOrder.map((date) => {
+            const sessions = byDate.get(date)!;
+            // Total minutes for the day (no lunch deduction per session — handled in summary)
+            const totalMinutes = sessions.reduce(
+              (acc, s) => acc + calcWorkedMinutes(s.clock_in, s.clock_out),
+              0
+            );
+            // Deduct 1 lunch hour once for the whole day if there are completed sessions
+            const completedSessions = sessions.filter((s) => s.clock_in && s.clock_out);
+            const dailyMinutes = completedSessions.length > 0
+              ? Math.max(0, totalMinutes - 60)
+              : totalMinutes;
+
+            return sessions.map((session, idx) => (
+              <tr key={`${date}-${idx}`} className={idx > 0 ? "bg-gray-50/50" : ""}>
+                {idx === 0 ? (
+                  <td
+                    className="px-3 py-3 text-gray-900 align-top"
+                    rowSpan={sessions.length}
+                  >
+                    {formatDate(date)}
+                  </td>
+                ) : null}
+                <td className="px-3 py-3 text-center">
+                  <div className="text-gray-700">{formatTime(session.clock_in)}</div>
+                  <LocationBadge value={session.clock_in_location} />
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <div className="text-gray-700">{formatTime(session.clock_out)}</div>
+                  <LocationBadge value={session.clock_out_location} />
+                </td>
+                {idx === 0 ? (
+                  <td
+                    className="px-3 py-3 text-center align-middle"
+                    rowSpan={sessions.length}
+                  >
+                    <span className="font-medium text-gray-700">
+                      {sessions.length > 1
+                        ? formatDuration(dailyMinutes)
+                        : formatDuration(Math.max(0, calcWorkedMinutes(session.clock_in, session.clock_out) - 60))}
+                    </span>
+                    {sessions.length > 1 && (
+                      <span className="block text-xs text-gray-400">
+                        {sessions.length}회 세션
+                      </span>
+                    )}
+                  </td>
+                ) : null}
+              </tr>
+            ));
+          })}
         </tbody>
       </table>
     </div>
