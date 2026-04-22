@@ -124,6 +124,8 @@ export interface LeaveRequestItem {
 
 interface Props {
   role: string;
+  currentUserTeam: string;
+  currentUserTitle: string;
   todayFormatted: string;
   attendanceList: AttendanceItem[];
   profilesList: ProfileItem[];
@@ -157,6 +159,11 @@ function minutesToHHMM(totalMinutes: number) {
 
 export default function AdminTabs({
   role,
+  // currentUserTeam and currentUserTitle are passed for future use / extensibility
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  currentUserTeam: _currentUserTeam,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  currentUserTitle: _currentUserTitle,
   todayFormatted,
   attendanceList,
   profilesList: initialProfiles,
@@ -256,19 +263,30 @@ export default function AdminTabs({
 
   const supabase = createClient();
   const isMaster = role === "master";
-  const isAdminOrMaster = role === "admin" || role === "master";
+  const isAdmin = role === "admin";
+  const isAdminOrMaster = isAdmin || isMaster;
 
   // Fetch attendance for a specific date
   const fetchDateAttendance = useCallback(
     async (date: string) => {
       setDateLoading(true);
-      const { data } = await supabase
+      const teamUserIds = isAdmin
+        ? initialProfiles.map((p) => p.id)
+        : null;
+
+      let query = supabase
         .from("attendance")
         .select(
           "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles!attendance_user_id_fkey(email)"
         )
         .eq("date", date)
         .order("clock_in", { ascending: true });
+
+      if (teamUserIds !== null) {
+        query = query.in("user_id", teamUserIds.length > 0 ? teamUserIds : ["none"]);
+      }
+
+      const { data } = await query;
 
       const list: AttendanceItem[] = (data ?? []).map((r) => ({
         id: r.id,
@@ -286,7 +304,7 @@ export default function AdminTabs({
       setDateAttendance(list);
       setDateLoading(false);
     },
-    [supabase, isMaster]
+    [supabase, isMaster, isAdmin, initialProfiles]
   );
 
   // Fetch attendance whenever date changes
@@ -702,6 +720,8 @@ export default function AdminTabs({
     { key: "roles", label: "직원 권한 관리", visible: isMaster },
     { key: "orgchart", label: "조직도", visible: isMaster },
   ];
+
+  // CSV export and monthly stats are master-only features
 
   return (
     <div>

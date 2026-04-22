@@ -14,7 +14,7 @@ export default async function AdminPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, team, title")
     .eq("id", user.id)
     .single();
 
@@ -25,7 +25,23 @@ export default async function AdminPage() {
     timeZone: "Asia/Seoul",
   });
 
-  const { data: records } = await supabase
+  const isMaster = profile.role === "master";
+  const adminTeam = profile.team ?? "";
+
+  // For admin: filter profiles and attendance to their team only
+  const profilesQuery = supabase
+    .from("profiles")
+    .select("id, email, name, role, position, title, team, status")
+    .order("email");
+
+  const { data: allProfiles } = isMaster
+    ? await profilesQuery
+    : await profilesQuery.eq("team", adminTeam);
+
+  // Get user_ids for the relevant profiles to filter attendance
+  const relevantUserIds = (allProfiles ?? []).map((p) => p.id);
+
+  const attendanceQuery = supabase
     .from("attendance")
     .select(
       "id, user_id, clock_in, clock_out, clock_in_location, clock_out_location, updated_by, updated_at, latitude, longitude, profiles!attendance_user_id_fkey(email)"
@@ -33,18 +49,21 @@ export default async function AdminPage() {
     .eq("date", today)
     .order("clock_in", { ascending: true });
 
-  const { data: allProfiles } = await supabase
-    .from("profiles")
-    .select("id, email, name, role, position, title, team, status")
-    .order("email");
+  const { data: records } = isMaster
+    ? await attendanceQuery
+    : await attendanceQuery.in("user_id", relevantUserIds.length > 0 ? relevantUserIds : ["none"]);
 
-  // Fetch all leave requests with user emails
-  const { data: leaveRecords } = await supabase
+  // Fetch leave requests — filtered to team for admin
+  const leaveQuery = supabase
     .from("leave_requests")
     .select(
       "id, user_id, leave_type, start_date, end_date, reason, status, admin_status, master_status, admin_processed_by, master_processed_by, admin_processed_at, master_processed_at, created_at, profiles(email)"
     )
     .order("created_at", { ascending: false });
+
+  const { data: leaveRecords } = isMaster
+    ? await leaveQuery
+    : await leaveQuery.in("user_id", relevantUserIds.length > 0 ? relevantUserIds : ["none"]);
 
   const todayFormatted = new Date().toLocaleDateString("ko-KR", {
     year: "numeric",
@@ -65,8 +84,8 @@ export default async function AdminPage() {
     clock_out_location: r.clock_out_location,
     updated_by: r.updated_by,
     updated_at: r.updated_at,
-    latitude: profile.role === "master" ? r.latitude : null,
-    longitude: profile.role === "master" ? r.longitude : null,
+    latitude: isMaster ? r.latitude : null,
+    longitude: isMaster ? r.longitude : null,
   }));
 
   const profilesList = (allProfiles ?? []).map((p) => ({
@@ -123,6 +142,8 @@ export default async function AdminPage() {
       <main className="mx-auto max-w-4xl px-4 py-8">
         <AdminTabs
           role={profile.role}
+          currentUserTeam={adminTeam}
+          currentUserTitle={profile.title ?? ""}
           todayFormatted={todayFormatted}
           attendanceList={attendanceList}
           profilesList={profilesList}

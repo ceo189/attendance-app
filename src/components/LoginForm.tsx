@@ -53,6 +53,11 @@ export default function LoginForm() {
           setLoading(false);
           return;
         }
+        if (!email.toLowerCase().endsWith("@grovit.kr")) {
+          setError("그로빗 회사 이메일(@grovit.kr)만 가입 가능합니다.");
+          setLoading(false);
+          return;
+        }
         const { error: signUpError } = await supabase.auth.signUp({
           email,
           password,

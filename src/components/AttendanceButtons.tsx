@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 function getKoreanDate() {
@@ -107,6 +107,7 @@ export default function AttendanceButtons({
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const submittingRef = useRef(false);
   const supabase = createClient();
 
   const showToast = useCallback(
@@ -118,10 +119,12 @@ export default function AttendanceButtons({
   );
 
   async function handleClockIn() {
+    if (submittingRef.current) return;
     if (!selectedLocation) {
       showToast("error", "출근 장소를 선택해주세요.");
       return;
     }
+    submittingRef.current = true;
     setLoading(true);
     try {
       let lat: number | null = null;
@@ -151,7 +154,8 @@ export default function AttendanceButtons({
         .single();
 
       if (error) {
-        showToast("error", `출근 기록 실패: ${error.message}`);
+        console.error("출근 기록 실패:", error);
+        showToast("error", "출근 기록에 실패했습니다. 다시 시도해주세요.");
       } else if (data) {
         setClockIn(now);
         setClockInLocation(selectedLocation);
@@ -161,12 +165,15 @@ export default function AttendanceButtons({
         sendNotify("clock_in", { email: userEmail, name: userName, team: userTeam, title: userTitle }, now, selectedLocation);
       }
     } catch (err) {
-      showToast("error", `네트워크 오류: ${String(err)}`);
+      console.error("출근 처리 중 오류:", err);
+      showToast("error", "네트워크 오류가 발생했습니다. 다시 시도해주세요.");
     }
+    submittingRef.current = false;
     setLoading(false);
   }
 
   async function handleClockOut() {
+    if (submittingRef.current) return;
     if (!currentRecordId) {
       showToast("error", "출근 기록이 없어 퇴근 처리할 수 없습니다.");
       return;
@@ -175,6 +182,7 @@ export default function AttendanceButtons({
       showToast("error", "퇴근 장소를 선택해주세요.");
       return;
     }
+    submittingRef.current = true;
     setLoading(true);
     try {
       let lat: number | null = null;
@@ -201,7 +209,8 @@ export default function AttendanceButtons({
         .eq("id", currentRecordId);
 
       if (error) {
-        showToast("error", `퇴근 기록 실패: ${error.message}`);
+        console.error("퇴근 기록 실패:", error);
+        showToast("error", "퇴근 기록에 실패했습니다. 다시 시도해주세요.");
       } else {
         setClockOut(now);
         setClockOutLocation(selectedLocation);
@@ -209,12 +218,18 @@ export default function AttendanceButtons({
         sendNotify("clock_out", { email: userEmail, name: userName, team: userTeam, title: userTitle }, now, selectedLocation);
       }
     } catch (err) {
-      showToast("error", `네트워크 오류: ${String(err)}`);
+      console.error("퇴근 처리 중 오류:", err);
+      showToast("error", "네트워크 오류가 발생했습니다. 다시 시도해주세요.");
     }
+    submittingRef.current = false;
     setLoading(false);
   }
 
   function handleReClockIn() {
+    if (!clockOut) {
+      showToast("error", "퇴근 기록이 완료된 후에만 재출근할 수 있습니다.");
+      return;
+    }
     setClockIn(null);
     setClockOut(null);
     setClockInLocation("");
