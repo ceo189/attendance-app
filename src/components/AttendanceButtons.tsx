@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 function getKoreanDate() {
@@ -13,31 +14,22 @@ const LOCATIONS = [
   { value: "remote", label: "재택" },
 ] as const;
 
-function LocationBadge({ value }: { value: string }) {
-  const label = LOCATIONS.find((l) => l.value === value)?.label ?? value;
-  return (
-    <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-      {label}
-    </span>
-  );
-}
+const LOCATION_LABELS: Record<string, string> = {
+  office: "사무실",
+  outside: "외부",
+  remote: "재택",
+};
 
 function getGPS(): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("이 브라우저에서 위치 정보를 지원하지 않습니다."));
+      reject(new Error("위치 미지원"));
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (pos) =>
         resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => {
-        if (err.code === 1)
-          reject(new Error("위치 정보 접근 권한을 허용해 주세요."));
-        else if (err.code === 2)
-          reject(new Error("위치 정보를 가져올 수 없습니다."));
-        else reject(new Error("위치 정보 요청 시간이 초과되었습니다."));
-      },
+      () => reject(new Error("위치 실패")),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   });
@@ -60,17 +52,21 @@ async function sendNotify(
   }
 }
 
+interface Session {
+  id: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  clock_in_location: string | null;
+  clock_out_location: string | null;
+}
+
 interface Props {
   userId: string;
   userEmail: string;
   userName: string;
   userTeam: string;
   userTitle: string;
-  recordId: string | null;
-  initialClockIn: string | null;
-  initialClockOut: string | null;
-  initialClockInLocation: string | null;
-  initialClockOutLocation: string | null;
+  todaySessions: Session[];
   locationConsent: boolean;
 }
 
@@ -80,28 +76,11 @@ export default function AttendanceButtons({
   userName,
   userTeam,
   userTitle,
-  recordId,
-  initialClockIn,
-  initialClockOut,
-  initialClockInLocation,
-  initialClockOutLocation,
+  todaySessions: initialSessions,
   locationConsent,
 }: Props) {
-  const [clockIn, setClockIn] = useState<string | null>(initialClockIn);
-  const [clockOut, setClockOut] = useState<string | null>(initialClockOut);
-  const [clockInLocation, setClockInLocation] = useState<string>(
-    initialClockInLocation ?? ""
-  );
-  const [clockOutLocation, setClockOutLocation] = useState<string>(
-    initialClockOutLocation ?? ""
-  );
-  const [selectedLocation, setSelectedLocation] = useState<string>("");
-  const [currentRecordId, setCurrentRecordId] = useState<string | null>(
-    recordId
-  );
-  const [sessionCount, setSessionCount] = useState<number>(
-    initialClockIn ? 1 : 0
-  );
+  const [sessions, setSessions] = useState<Session[]>(initialSessions);
+  const [selectedLocation, setSelectedLocation] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{
     type: "success" | "error";
@@ -109,6 +88,7 @@ export default function AttendanceButtons({
   } | null>(null);
   const submittingRef = useRef(false);
   const supabase = createClient();
+  const router = useRouter();
 
   const showToast = useCallback(
     (type: "success" | "error", message: string) => {
@@ -118,10 +98,30 @@ export default function AttendanceButtons({
     []
   );
 
+  // Find the active (latest) session
+  const activeSession = sessions.find((s) => s.clock_in && !s.clock_out);
+  const lastSession = sessions[0]; // sessions are ordered desc by clock_in
+  const canClockIn = !activeSession && (!lastSession || !!lastSession.clock_out);
+  const canClockOut = !!activeSession;
+  const canReClockIn =
+    sessions.length > 0 &&
+    !activeSession &&
+    !!lastSession?.clock_out;
+
+  function formatTime(iso: string | null) {
+    if (!iso) return "--:--";
+    return new Date(iso).toLocaleTimeString("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  }
+
   async function handleClockIn() {
     if (submittingRef.current) return;
     if (!selectedLocation) {
-      showToast("error", "출근 장소를 선택해주세요.");
+      showToast("error", "장소를 선택해주세요.");
       return;
     }
     submittingRef.current = true;
@@ -129,14 +129,13 @@ export default function AttendanceButtons({
     try {
       let lat: number | null = null;
       let lng: number | null = null;
-
       if (locationConsent) {
         try {
           const gps = await getGPS();
           lat = gps.lat;
           lng = gps.lng;
         } catch {
-          // GPS 실패해도 출퇴근 기록은 진행
+          // GPS 실패해도 진행
         }
       }
 
@@ -150,36 +149,36 @@ export default function AttendanceButtons({
           clock_in_location: selectedLocation,
           ...(lat !== null && { latitude: lat, longitude: lng }),
         })
-        .select("id")
+        .select("id, clock_in, clock_out, clock_in_location, clock_out_location")
         .single();
 
       if (error) {
-        console.error("출근 기록 실패:", error);
+        console.error("출근 실패:", error);
         showToast("error", "출근 기록에 실패했습니다. 다시 시도해주세요.");
       } else if (data) {
-        setClockIn(now);
-        setClockInLocation(selectedLocation);
-        setCurrentRecordId(data.id);
+        setSessions((prev) => [data, ...prev]);
         setSelectedLocation("");
         showToast("success", "출근 기록 완료!");
-        sendNotify("clock_in", { email: userEmail, name: userName, team: userTeam, title: userTitle }, now, selectedLocation);
+        sendNotify(
+          "clock_in",
+          { email: userEmail, name: userName, team: userTeam, title: userTitle },
+          now,
+          selectedLocation
+        );
+        router.refresh();
       }
-    } catch (err) {
-      console.error("출근 처리 중 오류:", err);
-      showToast("error", "네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+    } catch {
+      showToast("error", "네트워크 오류가 발생했습니다.");
+    } finally {
+      submittingRef.current = false;
+      setLoading(false);
     }
-    submittingRef.current = false;
-    setLoading(false);
   }
 
   async function handleClockOut() {
-    if (submittingRef.current) return;
-    if (!currentRecordId) {
-      showToast("error", "출근 기록이 없어 퇴근 처리할 수 없습니다.");
-      return;
-    }
+    if (submittingRef.current || !activeSession) return;
     if (!selectedLocation) {
-      showToast("error", "퇴근 장소를 선택해주세요.");
+      showToast("error", "장소를 선택해주세요.");
       return;
     }
     submittingRef.current = true;
@@ -187,14 +186,13 @@ export default function AttendanceButtons({
     try {
       let lat: number | null = null;
       let lng: number | null = null;
-
       if (locationConsent) {
         try {
           const gps = await getGPS();
           lat = gps.lat;
           lng = gps.lng;
         } catch {
-          // GPS 실패해도 출퇴근 기록은 진행
+          // GPS 실패해도 진행
         }
       }
 
@@ -206,90 +204,95 @@ export default function AttendanceButtons({
           clock_out_location: selectedLocation,
           ...(lat !== null && { latitude: lat, longitude: lng }),
         })
-        .eq("id", currentRecordId);
+        .eq("id", activeSession.id);
 
       if (error) {
-        console.error("퇴근 기록 실패:", error);
+        console.error("퇴근 실패:", error);
         showToast("error", "퇴근 기록에 실패했습니다. 다시 시도해주세요.");
       } else {
-        setClockOut(now);
-        setClockOutLocation(selectedLocation);
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeSession.id
+              ? { ...s, clock_out: now, clock_out_location: selectedLocation }
+              : s
+          )
+        );
+        setSelectedLocation("");
         showToast("success", "퇴근 기록 완료!");
-        sendNotify("clock_out", { email: userEmail, name: userName, team: userTeam, title: userTitle }, now, selectedLocation);
+        sendNotify(
+          "clock_out",
+          { email: userEmail, name: userName, team: userTeam, title: userTitle },
+          now,
+          selectedLocation
+        );
+        router.refresh();
       }
-    } catch (err) {
-      console.error("퇴근 처리 중 오류:", err);
-      showToast("error", "네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+    } catch {
+      showToast("error", "네트워크 오류가 발생했습니다.");
+    } finally {
+      submittingRef.current = false;
+      setLoading(false);
     }
-    submittingRef.current = false;
-    setLoading(false);
   }
 
-  function handleReClockIn() {
-    if (!clockOut) {
-      showToast("error", "퇴근 기록이 완료된 후에만 재출근할 수 있습니다.");
-      return;
-    }
-    setClockIn(null);
-    setClockOut(null);
-    setClockInLocation("");
-    setClockOutLocation("");
-    setSelectedLocation("");
-    setCurrentRecordId(null);
-    setSessionCount((n) => n + 1);
-  }
-
-  function formatTime(iso: string | null) {
-    if (!iso) return "--:--";
-    return new Date(iso).toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-  }
-
-  const showDropdown = !clockOut;
-  const sessionDone = !!clockIn && !!clockOut;
+  const showDropdown = canClockIn || canClockOut;
+  const dropdownLabel = canClockOut ? "퇴근" : "출근";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {toast && (
         <div
-          className={`mx-auto max-w-sm rounded-lg px-4 py-3 text-center text-sm font-medium shadow-md transition-all ${
+          className={`mx-auto max-w-sm rounded-lg px-4 py-3 text-center text-sm font-medium shadow-md ${
             toast.type === "success"
               ? "bg-green-100 text-green-800"
               : "bg-red-100 text-red-800"
           }`}
         >
-          {toast.type === "success" ? "\u{1F7E2}" : "\u{1F534}"}{" "}
           {toast.message}
         </div>
       )}
 
-      {sessionCount > 1 && (
-        <p className="text-center text-xs text-gray-400">
-          오늘 {sessionCount}번째 세션
-        </p>
+      {/* Today's sessions list */}
+      {sessions.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-center text-xs font-medium text-gray-500">
+            오늘의 근무 기록
+          </p>
+          {[...sessions].reverse().map((s, i) => (
+            <div
+              key={s.id}
+              className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 text-sm"
+            >
+              <span className="text-xs text-gray-400">
+                {sessions.length > 1 ? `${i + 1}차` : ""}
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-green-600">
+                  {formatTime(s.clock_in)}
+                </span>
+                {s.clock_in_location && (
+                  <span className="text-xs text-gray-400">
+                    {LOCATION_LABELS[s.clock_in_location] ?? s.clock_in_location}
+                  </span>
+                )}
+              </div>
+              <span className="text-gray-300">→</span>
+              <div className="flex items-center gap-3">
+                <span className={s.clock_out ? "text-red-500" : "text-gray-300"}>
+                  {s.clock_out ? formatTime(s.clock_out) : "근무중"}
+                </span>
+                {s.clock_out_location && (
+                  <span className="text-xs text-gray-400">
+                    {LOCATION_LABELS[s.clock_out_location] ?? s.clock_out_location}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      <div className="flex justify-center gap-8 text-center">
-        <div>
-          <p className="text-sm text-gray-500">출근</p>
-          <p className="text-lg font-semibold text-gray-900">
-            {formatTime(clockIn)}
-          </p>
-          {clockInLocation && <LocationBadge value={clockInLocation} />}
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">퇴근</p>
-          <p className="text-lg font-semibold text-gray-900">
-            {formatTime(clockOut)}
-          </p>
-          {clockOutLocation && <LocationBadge value={clockOutLocation} />}
-        </div>
-      </div>
-
+      {/* Location dropdown */}
       {showDropdown && (
         <div className="flex justify-center">
           <select
@@ -297,9 +300,7 @@ export default function AttendanceButtons({
             onChange={(e) => setSelectedLocation(e.target.value)}
             className="w-48 rounded-lg border border-gray-300 bg-white px-4 py-3 text-center text-sm font-medium text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           >
-            <option value="">
-              -- {clockIn ? "퇴근" : "출근"} 장소 선택 --
-            </option>
+            <option value="">-- {dropdownLabel} 장소 선택 --</option>
             {LOCATIONS.map((loc) => (
               <option key={loc.value} value={loc.value}>
                 {loc.label}
@@ -309,37 +310,42 @@ export default function AttendanceButtons({
         </div>
       )}
 
+      {/* Clock in / out buttons */}
       <div className="flex justify-center gap-4">
-        <button
-          onClick={handleClockIn}
-          disabled={!!clockIn || loading}
-          className="h-28 w-28 rounded-2xl bg-green-500 text-lg font-bold text-white shadow-lg transition hover:bg-green-600 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none sm:h-36 sm:w-36 sm:text-xl"
-        >
-          {loading && !clockIn ? "..." : clockIn ? "출근 완료" : "출근하기"}
-        </button>
-        <button
-          onClick={handleClockOut}
-          disabled={!clockIn || !!clockOut || loading}
-          className="h-28 w-28 rounded-2xl bg-red-500 text-lg font-bold text-white shadow-lg transition hover:bg-red-600 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none sm:h-36 sm:w-36 sm:text-xl"
-        >
-          {loading && clockIn && !clockOut
-            ? "..."
-            : clockOut
-              ? "퇴근 완료"
-              : "퇴근하기"}
-        </button>
-      </div>
-
-      {sessionDone && (
-        <div className="flex justify-center">
+        {canClockIn ? (
           <button
-            onClick={handleReClockIn}
-            className="rounded-xl border border-blue-300 bg-blue-50 px-6 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 active:scale-95"
+            onClick={handleClockIn}
+            disabled={loading}
+            className="h-28 w-28 rounded-2xl bg-green-500 text-lg font-bold text-white shadow-lg transition hover:bg-green-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:h-36 sm:w-36 sm:text-xl"
           >
-            재출근
+            {loading ? "..." : sessions.length > 0 ? "재출근" : "출근하기"}
           </button>
-        </div>
-      )}
+        ) : (
+          <button
+            disabled
+            className="h-28 w-28 rounded-2xl bg-gray-300 text-lg font-bold text-white sm:h-36 sm:w-36 sm:text-xl"
+          >
+            출근 완료
+          </button>
+        )}
+
+        {canClockOut ? (
+          <button
+            onClick={handleClockOut}
+            disabled={loading}
+            className="h-28 w-28 rounded-2xl bg-red-500 text-lg font-bold text-white shadow-lg transition hover:bg-red-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:h-36 sm:w-36 sm:text-xl"
+          >
+            {loading ? "..." : "퇴근하기"}
+          </button>
+        ) : (
+          <button
+            disabled
+            className="h-28 w-28 rounded-2xl bg-gray-300 text-lg font-bold text-white sm:h-36 sm:w-36 sm:text-xl"
+          >
+            퇴근하기
+          </button>
+        )}
+      </div>
     </div>
   );
 }

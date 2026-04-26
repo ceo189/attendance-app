@@ -28,14 +28,12 @@ export default async function DashboardPage() {
   const today = new Date().toLocaleDateString("sv-SE", {
     timeZone: "Asia/Seoul",
   });
-  const { data: todayRecords } = await supabase
+  const { data: todaySessions } = await supabase
     .from("attendance")
     .select("id, clock_in, clock_out, clock_in_location, clock_out_location")
     .eq("user_id", user.id)
     .eq("date", today)
     .order("clock_in", { ascending: false });
-
-  const todayRecord = todayRecords?.[0] ?? null;
 
   const now = new Date(
     new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" })
@@ -100,11 +98,13 @@ export default async function DashboardPage() {
               userName={profile?.name ?? ""}
               userTeam={profile?.team ?? ""}
               userTitle={profile?.title ?? ""}
-              recordId={todayRecord?.id ?? null}
-              initialClockIn={todayRecord?.clock_in ?? null}
-              initialClockOut={todayRecord?.clock_out ?? null}
-              initialClockInLocation={todayRecord?.clock_in_location ?? null}
-              initialClockOutLocation={todayRecord?.clock_out_location ?? null}
+              todaySessions={(todaySessions ?? []).map((s) => ({
+                id: s.id,
+                clock_in: s.clock_in,
+                clock_out: s.clock_out,
+                clock_in_location: s.clock_in_location,
+                clock_out_location: s.clock_out_location,
+              }))}
               locationConsent={!!profile?.location_consent}
             />
           </div>
